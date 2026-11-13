@@ -15,3 +15,9 @@ its numbers are in the git history of this folder.
 `uv lock` can execute the cloned projects' build hooks, so run it only in a disposable
 virtual machine with no shared folders: `vm.sh` installs what it needs there and runs the
 study. `python run.py --out DIR --skip-check` audits without calling `uv lock`.
+
+`remeasure.sh` re-measures the README's headline table with the latest release, in a
+disposable VM: one pip-audit run per project at the study's commit, given to both depquiet
+0.39.0 (which measured the table) and the latest release, so any difference in verdicts
+comes from depquiet, not from advisories published since. No `uv lock` is involved.
+
