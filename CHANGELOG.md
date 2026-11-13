@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`--fix-plan` plans fixes hidden by your `exclude-newer` cooldown.** Instead of
+  switching the cooldown off, it writes an `exclude-newer-package` cut-off for that
+  package only, one second after the fix was published, verified with uv's resolver:
+  the package moves to the fix and no further, and the rest of the project keeps the
+  cooldown. Existing exemptions are kept; the entry goes to `pyproject.toml` or `uv.toml`,
+  wherever `exclude-newer` is set. This is the narrow exemption uv's maintainers suggest
+  instead of a blanket bypass (astral-sh/uv#18995). Verified end to end with uv 0.11.32.
+
 ## [0.43.0] - 2026-11-13
 
 ### Changed

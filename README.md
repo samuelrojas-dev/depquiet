@@ -595,7 +595,39 @@ Real run on a small project pinning `requests==2.31.0` and `botocore==1.29.0` (w
 ```
 
 After `git apply` and that command, pip-audit reports no known vulnerabilities in the
-project's dependencies. Python-floor and cooldown blocks are reported, not planned.
+project's dependencies. Python-floor blocks are reported, not planned.
+
+#### Fixes hidden by your cooldown (`exclude-newer`)
+
+A cooldown (`exclude-newer = "7 days"`, or a date) protects you from a malicious release
+by hiding releases newer than the cut-off. It hides security fixes too: the scanner flags
+the vulnerable version, `uv lock` says "No solution found", and the usual way out is to
+switch the cooldown off. `--fix-plan` writes the narrowest exemption uv supports instead:
+an `exclude-newer-package` cut-off for that package only, one second after the fix was
+published. The package can move to the fix and no further, even with `uv lock --upgrade`,
+and every other package keeps the cooldown. Existing exemptions are kept, and the entry
+goes where you set `exclude-newer` (`pyproject.toml` or `uv.toml`).
+
+Real run on a project with `exclude-newer = "2025-06-01T00:00:00Z"` and requests 2.32.3,
+whose fix for CVE-2024-47081 (2.32.4) was published on 2025-06-09:
+
+```
+🔧 Fix plan
+   ✓ requests 2.32.3 → 2.32.4: exempt it from your exclude-newer cooldown, only up to this release (published 2025-06-09)
+
+   Verified with uv's resolver: all fixes resolve together.
+   Then run: uv lock --upgrade-package requests==2.32.4
+```
+```diff
+ [tool.uv]
+ exclude-newer = "2025-06-01T00:00:00Z"
++exclude-newer-package = { requests = "2025-06-09T16:43:06Z" }
+```
+
+After `git apply` and that command, requests is at 2.32.4, `uv lock --upgrade` keeps it
+there, and urllib3 stays under the project's cut-off. An exemption admits a release younger
+than your cooldown, so the plan says so: check that it is the advisory's fix and comes from
+the project's usual publisher before you merge.
 
 ### Auto-remediation (`--fix`)
 
