@@ -629,6 +629,17 @@ there, and urllib3 stays under the project's cut-off. An exemption admits a rele
 than your cooldown, so the plan says so: check that it is the advisory's fix and comes from
 the project's usual publisher before you merge.
 
+**Remove the entry once your cooldown catches up.** A per-package date overrides the
+cooldown for that package for good. With `exclude-newer = "7 days"`, an entry left in place
+holds the package at the fix release: in a real run, uv moved requests *back* from 2.34.2
+to 2.32.4. With a rolling cooldown the plan prints the date after which to remove the
+entry, and every depquiet scan warns about any `exclude-newer-package` date older than the
+project's own cut-off, whoever wrote it:
+
+```
+⚠️  exclude-newer-package holds requests at releases before 2025-06-09T16:43:06Z, older than your cooldown's cut-off (2026-11-06T21:32:08Z): uv keeps requests on old releases. Remove the entry.
+```
+
 ### Auto-remediation (`--fix`)
 
 `depquiet --fix` upgrades packages that have ACTION verdicts **and** a known fix version:

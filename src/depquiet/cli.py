@@ -34,7 +34,7 @@ from depquiet.engine import scan
 from depquiet.finding_identity import parse_report, validate_project_id
 from depquiet.fix import apply_fixes, print_fix_report
 from depquiet.fixcheck import check_fixes
-from depquiet.fixplan import FixPlan, build_fix_plan, print_fix_plan
+from depquiet.fixplan import FixPlan, build_fix_plan, print_fix_plan, stale_exemptions
 from depquiet.html_report import write_html
 from depquiet.ignore import apply_ignores, load_ignore, print_ignore_warnings
 from depquiet.kev import KevCatalog, apply_kev, fetch_kev_catalog, load_kev_from_file
@@ -790,6 +790,17 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
             # stderr, so --json users see that KEV was not checked
             why = "offline with no cache" if merged.offline else "download failed, no cache"
             print(f"⚠️  KEV catalog unavailable ({why}); KEV was not checked", file=sys.stderr)
+
+    # A per-package cut-off older than the project's own cooldown holds that
+    # package back, possibly on a vulnerable release. Checked on every scan:
+    # it only reads the project's config.
+    for package, entry, cutoff in stale_exemptions(args.path):
+        print(
+            f"⚠️  exclude-newer-package holds {package} at releases before {entry}, older "
+            f"than your cooldown's cut-off ({cutoff}): uv keeps {package} on old releases. "
+            "Remove the entry.",
+            file=sys.stderr,
+        )
 
     fix_plan = None
     if args.check_fixes or args.fix_plan is not None:
