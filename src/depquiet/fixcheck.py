@@ -171,7 +171,8 @@ def _classify(check: FixCheck, text: str) -> None:
         check.reason = "cooldown"
         check.next_step = (
             f"{package} {version} is newer than the project's exclude-newer cut-off: "
-            "wait for the cut-off to pass, or exempt this package."
+            "wait for the cut-off to pass, or exempt only this release (--fix-plan writes "
+            "the exclude-newer-package entry)."
         )
         return
     floor = re.search(
