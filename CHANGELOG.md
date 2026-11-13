@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.44.0] - 2026-11-13
+
 ### Added
 - **`--fix-plan` plans fixes hidden by your `exclude-newer` cooldown.** Instead of
   switching the cooldown off, it writes an `exclude-newer-package` cut-off for that
@@ -1031,7 +1033,8 @@ requirements.txt and npm projects:
 - CI workflow with lint, typecheck, test matrix (3.11/3.12/3.13), and build
 - Automated release workflow with trusted PyPI publishing
 
-[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.43.0...HEAD
+[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.44.0...HEAD
+[0.44.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.43.0...v0.44.0
 [0.43.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.42.2...v0.43.0
 [0.42.2]: https://github.com/samuelrojas-dev/depquiet/compare/v0.42.1...v0.42.2
 [0.42.1]: https://github.com/samuelrojas-dev/depquiet/compare/v0.42.0...v0.42.1
