@@ -65,7 +65,25 @@ def test_explain_says_why_there_is_no_epss_score() -> None:
         for s in explain_triage(TriageResult(vuln=vuln, verdict=Verdict.ACTION)).signals
         if s.name == "EPSS score"
     )
-    assert "EPSS scores CVE ids" in signal.detail and "CVE-2025-50181" in signal.detail
+    # Since 0.42 EPSS is looked up through the CVE alias, so a missing score
+    # means the lookup was skipped or failed, not that the id format blocked it.
+    assert "skipped (--offline) or failed" in signal.detail
+    assert "CVE-2025-50181" in signal.detail
+
+
+def test_explain_says_when_an_advisory_has_no_cve_at_all() -> None:
+    from depquiet.explain import explain_triage
+    from depquiet.models import Severity, TriageResult, Verdict, Vulnerability
+
+    vuln = Vulnerability(
+        cve="GHSA-aaaa-bbbb-cccc", package="x", version="1", severity=Severity.MODERATE
+    )
+    signal = next(
+        s
+        for s in explain_triage(TriageResult(vuln=vuln, verdict=Verdict.ACTION)).signals
+        if s.name == "EPSS score"
+    )
+    assert "no CVE id or alias" in signal.detail
 
 
 def test_help_shows_examples_and_subcommands(capsys) -> None:
