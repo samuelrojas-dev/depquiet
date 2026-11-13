@@ -302,10 +302,12 @@ def check_fixes(result: ScanResult, project: Path) -> tuple[dict[str, FixCheck],
     targets = fix_targets(result)
     if not targets:
         return {}, ""
-    if shutil.which("uv") is None:
-        return {}, "--check-fixes needs uv on PATH."
+    # The project's lockfile first: on a project without one, installing uv
+    # would not help, so "needs uv on PATH" would send the user the wrong way.
     if not (project / "uv.lock").exists():
         return {}, "--check-fixes works on projects with a uv.lock."
+    if shutil.which("uv") is None:
+        return {}, "--check-fixes needs uv on PATH."
     names = _project_names(project)
     checks = {
         pkg: check_fix(project, pkg, version, project_names=names)

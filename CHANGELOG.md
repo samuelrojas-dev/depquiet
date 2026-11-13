@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+Found by using depquiet as a first-time user: PyPI page, quick start in a clean
+environment, the Action docs.
+- README "Direct vs. transitive" still said an unused direct dependency, and a
+  transitive one whose parents are unused, are **filtered**. Both have gone to review
+  since 0.41; the section now says development-only paths are the only rule that filters.
+- `depquiet explain` said an advisory's EPSS score was "not looked up" because it is
+  reported by a PYSEC or GHSA id. Since 0.42 the lookup uses the CVE alias, so a missing
+  score means the lookup was skipped or failed, and that is what it says now.
+- `--check-fixes` on a project without `uv.lock` said "needs uv on PATH" when uv was
+  missing too; it now says first that it works on projects with a `uv.lock`.
+- The PyPI summary ("Tells you which CVEs actually matter") promised more than depquiet
+  checks; it now matches the repository description.
+- Nine README links to `docs/` and `benchmarks/` were relative and broken on PyPI; they
+  point to GitHub now. The Action's outputs are documented, with an example.
+
+### Fixed
 - `SECURITY.md` said depquiet "never runs code from scanned projects", that its only
   network call was EPSS, and that 0.1.x was the supported version. None of that was true:
   some modes start pip-audit, uv or npm, which can run build code or install scripts, and

@@ -15,7 +15,7 @@ when the lockfile proves it.
 
 ### On real projects
 
-`pip-audit` on popular Python projects, at their head on 2026-11-11:
+`pip-audit` on popular Python projects, at their head on 2026-11-11, measured with depquiet 0.40.0:
 
 | Project | pip-audit alerts | Only reach dev tooling | Left to look at |
 |:--|--:|--:|--:|
@@ -26,7 +26,8 @@ when the lockfile proves it.
 | [PostHog](https://github.com/PostHog/posthog) | 255 | 8 | 247 |
 
 Every dismissed alert was checked against a separate walk of each `uv.lock`, with each
-project's dependency groups read by hand. Most are `virtualenv` and `filelock` pulled in
+project's dependency groups read by hand: all are development-only, the one kind of alert
+later versions still filter, which only filter less. Most are `virtualenv` and `filelock` pulled in
 by `pre-commit`. Details and the other 12 projects: [benchmarks](#benchmarks).
 
 Of the alerts left, many cannot be fixed by the upgrade the scanner names. Across 18 uv
@@ -155,9 +156,9 @@ affected-version list. Unknown or partial resolution remains explicit.
 
 CycloneDX, SPDX and OpenVEX use those component identities instead of presenting
 an advisory range as a component version. No lockfile resolution claims an
-observed installation or product impact. See [npm component evidence](docs/npm-component-evidence.md)
+observed installation or product impact. See [npm component evidence](https://github.com/samuelrojas-dev/depquiet/blob/main/docs/npm-component-evidence.md)
 for the JSON contract, matching limits and export behavior. Explicitly scoped
-reports support [instance baselines and diffs](docs/instance-baselines.md);
+reports support [instance baselines and diffs](https://github.com/samuelrojas-dev/depquiet/blob/main/docs/instance-baselines.md);
 unscoped legacy reports retain their existing identities.
 
 ### Standalone scanning with OSV.dev
@@ -259,7 +260,7 @@ to one.
 The analysis is bounded: initial workspace support covers npm and uv declarations,
 and finding-to-workspace associations use conservative dependency names rather
 than claiming an installed instance or verified call path. Other layouts retain
-legacy discovery. See [workspace and dynamic-import coverage](docs/workspace-coverage.md)
+legacy discovery. See [workspace and dynamic-import coverage](https://github.com/samuelrojas-dev/depquiet/blob/main/docs/workspace-coverage.md)
 for patterns, limits, aggregation and compatibility.
 
 ### Reachability analysis in depth
@@ -375,10 +376,14 @@ depquiet builds a dependency graph from the project before filtering:
 
 Rules, in order:
 
-1. **Direct** dependency: filtered when nothing imports it, the project never runs it as a
-   command, *and* no used direct dependency also pulls it in.
-2. **Transitive** dependency: filtered only when none of the direct dependencies that pull it
-   in are used. With no known path (Go, Dart, Maven), it is never filtered.
+1. **Direct** dependency that nothing uses (no import, never run as a command, not loaded by a
+   used dependency): kept for **review**, not filtered. Frameworks load packages your code
+   never imports, and no lockfile records that.
+2. **Transitive** dependency: kept for **review** when none of the direct dependencies that
+   pull it in are used, ACTION when one is. With no known path (Go, Dart, Maven) it is never
+   filtered.
+3. **Development only**: filtered when every known path to the package is a development
+   one, with no production parent. This is the only rule that filters.
 
 A direct dependency is **used** when any of these holds:
 
@@ -398,8 +403,9 @@ A direct dependency is **used** when any of these holds:
 - a used dependency loads it itself (FastAPI loads `python-multipart`, SQLAlchemy loads
   database drivers).
 
-Every rule only ever keeps alerts: a wrong match makes depquiet filter less, never more.
-3. **Unknown**: never filtered. This includes a `requirements.txt` where every line is pinned
+A wrong match only moves an alert from REVIEW to ACTION; it never hides one.
+
+**Unknown** dependency type: never filtered. This includes a `requirements.txt` where every line is pinned
    with `==` and there are no `# via` comments, since that is indistinguishable from
    `pip freeze` output.
 
@@ -517,7 +523,7 @@ resolution against the package index, so it needs uv and network access; the JSO
 has a `fix_check` object per alert.
 
 **Measured on 18 uv projects** (2026-11-12, at their head; script, raw output and every
-resolver message in [`benchmarks/fixcheck_study`](benchmarks/fixcheck_study/)). Each kept
+resolver message in [`benchmarks/fixcheck_study`](https://github.com/samuelrojas-dev/depquiet/tree/main/benchmarks/fixcheck_study/)). Each kept
 alert was checked against its own nearest fix; each package also against its highest fix,
 the one upgrade that clears all of its alerts:
 
@@ -813,7 +819,7 @@ with `--fail-on-new`; a missing input file retains its legacy exit code **1**.
 Legacy comparisons accept structurally valid older reports without `scanned`,
 but their completion cannot be verified from that missing flag. Instance mode
 requires `scanned: true`; older npm-project reports without `version_kind` require
-a rescan or explicit legacy comparison. See [identity and migration details](docs/instance-baselines.md).
+a rescan or explicit legacy comparison. See [identity and migration details](https://github.com/samuelrojas-dev/depquiet/blob/main/docs/instance-baselines.md).
 
 Typical CI workflow:
 
@@ -1040,7 +1046,7 @@ product-specific mitigations. Automatic exports preserve this uncertainty:
 
 A low EPSS, dev-only metadata, baseline, ignore or policy match never becomes an
 automatic `not_affected` claim. The existing remediation priorities and exit-code
-policy remain available. See the [assessment contract](docs/assessment-contract.md).
+policy remain available. See the [assessment contract](https://github.com/samuelrojas-dev/depquiet/blob/main/docs/assessment-contract.md).
 
 The output is consumable by policy engines like Sigstore's policy-controller and OPA/Gatekeeper to gate container deployments.
 
@@ -1077,7 +1083,7 @@ Existing scan JSON files used directly with `--baseline` keep their broad
 `CVE:package` legacy semantics, including across versions and node locations.
 They are not migrated automatically. A declared project ID is enforced even for
 this legacy format. For v2 migration, rescan with an explicit scope and review the
-new acceptance document. See [baseline format and compatibility](docs/instance-baselines.md).
+new acceptance document. See [baseline format and compatibility](https://github.com/samuelrojas-dev/depquiet/blob/main/docs/instance-baselines.md).
 
 ### Configurable CI gate (`--fail-on`)
 
@@ -1152,6 +1158,19 @@ that holds secrets while checking out outside contributions.
 ```
 
 **Action inputs:** `path`, `scanner`, `epss-threshold`, `offline`, `sarif`, `templates`, `policy`, `sbom`, `sbom-format`, `from-sbom`, `ignore`, `license`, `baseline`, `kev`, `kev-file`, `html`, `annotations`, `vex`, `diff-base`, `pr-comment`, `check-fixes`, `fail-on-action`, `fail-on`, `python-version`, `install-pip-audit`.
+
+**Action outputs:** `total`, `action`, `review`, `filtered` (alert counts), `sarif-file` and
+`sbom-file` (paths, when generated), `diff-new` and `diff-fixed` (when `diff-base` is set).
+
+```yaml
+- uses: samuelrojas-dev/depquiet@v0
+  id: depquiet
+  with:
+    fail-on-action: "false"
+- env:
+    ACTION_COUNT: ${{ steps.depquiet.outputs.action }}
+  run: echo "$ACTION_COUNT alerts need action"
+```
 
 > **Note:** `fail-on` (severity-based) supersedes `fail-on-action` (boolean). When `fail-on` is set, `fail-on-action` is ignored.
 
@@ -1412,7 +1431,7 @@ priorities and decision history, and can query OSV directly from lockfiles.
 
 The alert-reduction figures above describe captured scans; they do not establish
 false-positive rates or superiority over another scanner. The new
-[reference evaluator](benchmarks/reference/README.md) checks labelled cases,
+[reference evaluator](https://github.com/samuelrojas-dev/depquiet/blob/main/benchmarks/reference/README.md) checks labelled cases,
 including missing findings and unsafe dismissals. Two explicitly synthetic
 contract examples exercise its mechanics:
 
@@ -1421,18 +1440,18 @@ python benchmarks/reference/run.py --output synthetic-scan.json
 python benchmarks/evaluate.py --labels benchmarks/reference/synthetic.labels.json --scan synthetic-scan.json --snapshot benchmarks/reference/synthetic.snapshot.json --json
 ```
 
-The separate [upstream reference set](benchmarks/reference/real/README.md) contains
+The separate [upstream reference set](https://github.com/samuelrojas-dev/depquiet/blob/main/benchmarks/reference/real/README.md) contains
 10 selected advisory contexts from four pinned npm/Python projects, with frozen
 audits, source hashes and review evidence. CI checks that five `retain` and five
 `unknown` cases remain visible. Labels are agent-reviewed; human review is pending.
 
-A separate [configuration extension](benchmarks/reference/extensions/README.md)
+A separate [configuration extension](https://github.com/samuelrojas-dev/depquiet/blob/main/benchmarks/reference/extensions/README.md)
 adds two identities from the same pinned RealWorld project, preserving the original
 inputs. The combined deliberate sample has 12 contexts: six `retain`, six
 `unknown`, no `filter` labels and no human adjudications. It does not measure safe
 noise reduction.
 
-The [review workflow](docs/reference-reviews.md) prepares pending records, binds
+The [review workflow](https://github.com/samuelrojas-dev/depquiet/blob/main/docs/reference-reviews.md) prepares pending records, binds
 them to exact label/snapshot/case identities and reports caller-declared human,
 external and agent coverage separately. Disagreements remain uncertain; a human
 `filter` record cannot weaken a proposed `retain` or `unknown`. Optional coverage

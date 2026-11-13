@@ -141,7 +141,12 @@ def test_resolving_upgrade(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize(
     ("which", "lock", "message"),
-    [(None, True, "needs uv on PATH"), ("/usr/bin/uv", False, "projects with a uv.lock")],
+    [
+        (None, True, "needs uv on PATH"),
+        ("/usr/bin/uv", False, "projects with a uv.lock"),
+        # No uv.lock: installing uv would not help, so say what is missing.
+        (None, False, "projects with a uv.lock"),
+    ],
 )
 def test_missing_uv_or_lock(tmp_path: Path, which: str | None, lock: bool, message: str) -> None:
     project = _project(tmp_path)

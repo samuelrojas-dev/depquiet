@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "depquiet"
 version = "0.44.0"
-description = "Cut through vulnerability alert noise. Tells you which CVEs actually matter."
+description = "Tells you which dependency alerts never reach production, with proof from your lockfile. pip-audit, uv audit, npm, pnpm, Yarn."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
