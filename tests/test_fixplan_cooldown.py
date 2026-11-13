@@ -96,6 +96,7 @@ def test_plan_adds_a_package_cutoff_next_to_exclude_newer(tmp_path, monkeypatch)
     assert plan.to_dict()["included"][0]["cooldown_exemption"] == {
         "published": "2025-06-09T16:43:05Z",
         "cutoff": "2025-06-09T16:43:06Z",
+        "remove_after": "",  # a fixed cut-off has no date of its own
     }
     assert "younger than your cooldown" in plan.note
     # Planned on a copy: the project is untouched.
@@ -168,3 +169,69 @@ def test_removing_the_only_exemption_removes_the_line() -> None:
     text = HEAD + '[tool.uv]\nexclude-newer = "2025-06-01T00:00:00Z"\n'
     added = _set_cooldown(text, "pyproject.toml", "requests", "2025-06-09T16:43:06Z")
     assert _set_cooldown(added, "pyproject.toml", "requests", "") == text
+
+
+def test_dotted_package_names_are_quoted() -> None:
+    # Unquoted, TOML reads zope.interface as a table "zope" with key "interface".
+    text = HEAD + '[tool.uv]\nexclude-newer = "2025-06-01T00:00:00Z"\n'
+    after = _set_cooldown(text, "pyproject.toml", "zope.interface", "2025-06-09T16:43:06Z")
+    assert tomllib.loads(after)["tool"]["uv"]["exclude-newer-package"] == {
+        "zope.interface": "2025-06-09T16:43:06Z"
+    }
+
+
+def test_windows_line_endings_are_kept() -> None:
+    text = (HEAD + '[tool.uv]\nexclude-newer = "2025-06-01T00:00:00Z"\n').replace("\n", "\r\n")
+    after = _set_cooldown(text, "pyproject.toml", "requests", "2025-06-09T16:43:06Z")
+    assert after.count("\n") == after.count("\r\n")
+
+
+def test_rolling_cooldown_plan_says_when_to_remove_the_entry(tmp_path, monkeypatch) -> None:
+    project = _uv(tmp_path, '[tool.uv]\nexclude-newer = "7 days"\n')
+    _resolves_only_with_exemption(monkeypatch)
+    plan = build_fix_plan(_scan(), project, _checks())
+    [item] = plan.included
+    assert item.expires == "2025-06-16"
+    assert plan.to_dict()["included"][0]["cooldown_exemption"]["remove_after"] == "2025-06-16"
+    assert "holds the package on that release" in plan.note
+
+
+@pytest.mark.parametrize(
+    ("cooldown", "entries", "stale"),
+    [
+        # Rolling window: on 2026-11-13 a 7-day cooldown admits up to 2026-11-06.
+        ('"7 days"', '{ requests = "2025-06-09T16:43:06Z" }', ["requests"]),
+        ('"P1W"', '{ requests = "2025-06-09T16:43:06Z" }', ["requests"]),
+        ('"7 days"', '{ requests = "2026-11-10T00:00:00Z" }', []),
+        # A fixed date moved past the entry.
+        ('"2025-07-01T00:00:00Z"', '{ requests = "2025-06-09T16:43:06Z" }', ["requests"]),
+        ('"2025-06-01T00:00:00Z"', '{ requests = "2025-06-09T16:43:06Z" }', []),
+        # false (no cooldown for it) and per-package windows are never stale.
+        ('"7 days"', '{ requests = false, idna = "3 days" }', []),
+    ],
+)
+def test_stale_exemptions(tmp_path, cooldown, entries, stale) -> None:
+    from datetime import UTC, datetime
+
+    project = _uv(
+        tmp_path, f"[tool.uv]\nexclude-newer = {cooldown}\nexclude-newer-package = {entries}\n"
+    )
+    now = datetime(2026, 11, 13, tzinfo=UTC)
+    assert [name for name, _, _ in fp.stale_exemptions(project, now)] == stale
+
+
+def test_scan_warns_about_a_stale_exemption(tmp_path, monkeypatch, capsys) -> None:
+    import io
+
+    from depquiet.cli import main
+
+    project = _uv(
+        tmp_path,
+        '[tool.uv]\nexclude-newer = "7 days"\n'
+        'exclude-newer-package = { requests = "2025-06-09T16:43:06Z" }\n',
+    )
+    monkeypatch.setattr("sys.stdin", io.StringIO('{"dependencies": []}'))
+    main(["--path", str(project), "--stdin", "--offline"])
+    err = capsys.readouterr().err
+    assert "exclude-newer-package holds requests" in err
+    assert "Remove the entry" in err

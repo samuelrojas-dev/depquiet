@@ -97,6 +97,7 @@ class PlanItem:
     included: bool = False
     why: str = ""  # why it is left out
     published: str = ""  # set when the plan exempts the fix from a cooldown
+    expires: str = ""  # when a rolling cooldown admits the fix by itself
 
     @property
     def major_jump(self) -> bool:
@@ -140,7 +141,11 @@ class FixPlan:
                     "major_version_change": i.major_jump,
                     "also_upgrade": i.also_upgrade,
                     "cooldown_exemption": (
-                        {"published": i.published, "cutoff": i.edits[0].new}
+                        {
+                            "published": i.published,
+                            "cutoff": i.edits[0].new,
+                            "remove_after": i.expires,
+                        }
                         if i.published
                         else None
                     ),
@@ -347,6 +352,9 @@ def _cooldown_file(project: Path) -> tuple[str, str] | None:
 def _set_cooldown(text: str, file: str, package: str, value: str) -> str:
     """Set (or with value "" remove) ``package`` in ``exclude-newer-package``."""
     table = "tool.uv" if file.endswith("pyproject.toml") else ""
+    nl = "\r\n" if "\r\n" in text else "\n"
+    # TOML reads an unquoted ``zope.interface`` as a nested table.
+    name = package if re.fullmatch(r"[A-Za-z0-9_-]+", package) else f'"{package}"'
     lines = text.splitlines(keepends=True)
     span = _section(lines, table)
     if span is None:
@@ -358,18 +366,18 @@ def _set_cooldown(text: str, file: str, package: str, value: str) -> str:
         return _pep503(raw.strip("\"'")) == key
 
     for i in range(start, end):
-        match = _INLINE.match(lines[i].rstrip("\n"))
+        match = _INLINE.match(lines[i].rstrip("\r\n"))
         if not match:
             continue
         entries = [(m.group("key"), m.group("value")) for m in _ENTRY.finditer(match.group("body"))]
         kept = [(k, v) for k, v in entries if not same(k)]
         if value:
-            kept.append((package, f'"{value}"'))
+            kept.append((name, f'"{value}"'))
         if not kept:
             del lines[i]
             return "".join(lines)
         body = ", ".join(f"{k} = {v}" for k, v in kept)
-        newline = "\n" if lines[i].endswith("\n") else ""
+        newline = nl if lines[i].endswith("\n") else ""
         lines[i] = f"{match.group('lead')} {body} }}{match.group('tail')}{newline}"
         return "".join(lines)
 
@@ -380,12 +388,12 @@ def _set_cooldown(text: str, file: str, package: str, value: str) -> str:
             entry = re.match(rf"^\s*(?P<key>{_KEY})\s*=", lines[i])
             if entry and same(entry.group("key")):
                 if value:
-                    lines[i] = f'{package} = "{value}"\n'
+                    lines[i] = f'{name} = "{value}"{nl}'
                 else:
                     del lines[i]
                 return "".join(lines)
         if value:
-            lines.insert(s_start, f'{package} = "{value}"\n')
+            lines.insert(s_start, f'{name} = "{value}"{nl}')
         return "".join(lines)
 
     if not value:
@@ -396,9 +404,100 @@ def _set_cooldown(text: str, file: str, package: str, value: str) -> str:
     if anchor is None:
         return text
     if not lines[anchor].endswith("\n"):
-        lines[anchor] += "\n"
-    lines.insert(anchor + 1, f'exclude-newer-package = {{ {package} = "{value}" }}\n')
+        lines[anchor] += nl
+    lines.insert(anchor + 1, f'exclude-newer-package = {{ {name} = "{value}" }}{nl}')
     return "".join(lines)
+
+
+_DURATION = re.compile(
+    r"^\s*(\d+)\s*(second|minute|hour|day|week)s?\s*$|^P(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?)?$",
+    re.I,
+)
+
+
+def _parse_moment(value: str) -> Any:
+    from datetime import date, datetime
+
+    text = value.strip()
+    try:
+        moment = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        try:
+            moment = datetime.combine(date.fromisoformat(text), datetime.min.time())
+        except ValueError:
+            return None
+    return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
+
+
+def _parse_window(value: str) -> Any:
+    """A relative cooldown ("7 days", "1 week", "P7D") as a timedelta, else None."""
+    from datetime import timedelta
+
+    match = _DURATION.match(value.strip())
+    if not match:
+        return None
+    if match.group(1):
+        unit = match.group(2).lower()
+        return timedelta(**{f"{unit}s": int(match.group(1))})
+    weeks, days, hours = (int(g or 0) for g in match.group(3, 4, 5))
+    window = timedelta(weeks=weeks, days=days, hours=hours)
+    return window if window else None
+
+
+def _global_cooldown(project: Path) -> tuple[str, str, str] | None:
+    """(file, table, raw exclude-newer value) where the project sets it."""
+    where = _cooldown_file(project)
+    if where is None:
+        return None
+    file, table = where
+    data = tomllib.loads((project / file).read_text(encoding="utf-8"))
+    section: Any = data
+    for part in [p for p in table.split(".") if p]:
+        section = section.get(part, {})
+    return file, table, str(section.get("exclude-newer", ""))
+
+
+def cooldown_expiry(project: Path, published: str) -> str:
+    """When a rolling cooldown starts admitting ``published`` by itself (YYYY-MM-DD)."""
+    found = _global_cooldown(project)
+    window = _parse_window(found[2]) if found else None
+    moment = _parse_moment(published) if published else None
+    if window is None or moment is None:
+        return ""
+    return str((moment + window).date())
+
+
+def stale_exemptions(project: Path, now: Any = None) -> list[tuple[str, str, str]]:
+    """Per-package cut-offs older than the project's own cut-off.
+
+    An ``exclude-newer-package`` date only helps while it is newer than the
+    global cut-off. Once the cooldown moves past it (a rolling window, or a
+    date moved forward), it holds that package back on old releases, which
+    can bring vulnerabilities back. Returns (package, entry, global cut-off).
+    """
+    from datetime import datetime
+
+    found = _global_cooldown(project)
+    if found is None:
+        return []
+    file, table, raw = found
+    window = _parse_window(raw)
+    cutoff = (now or datetime.now(UTC)) - window if window is not None else _parse_moment(raw)
+    if cutoff is None:
+        return []
+    data = tomllib.loads((project / file).read_text(encoding="utf-8"))
+    section: Any = data
+    for part in [p for p in table.split(".") if p]:
+        section = section.get(part, {})
+    per = section.get("exclude-newer-package", {}) if isinstance(section, dict) else {}
+    stale: list[tuple[str, str, str]] = []
+    for name, value in per.items() if isinstance(per, dict) else []:
+        if not isinstance(value, str) or _parse_window(value) is not None:
+            continue
+        moment = _parse_moment(value)
+        if moment is not None and moment < cutoff:
+            stale.append((name, value, cutoff.strftime("%Y-%m-%dT%H:%M:%SZ")))
+    return stale
 
 
 def _current_cooldown(project: Path, file: str, table: str, package: str) -> str:
@@ -609,6 +708,7 @@ def build_fix_plan(
             else:
                 item.edits = planned
                 item.published = published_at(check.detail)
+                item.expires = cooldown_expiry(project, item.published)
         elif check.reason == "dependency" and check.also_upgrade:
             # Another package holds it back, and the project pins that package:
             # find the blocker version that allows the fix, and pin that.
@@ -659,7 +759,9 @@ def build_fix_plan(
     if any(i.published for i in included):
         note += (
             " A cooldown exemption admits a release younger than your cooldown: check that "
-            "it is the advisory's fix and comes from the project's usual publisher."
+            "it is the advisory's fix and comes from the project's usual publisher. Remove "
+            "it once your cooldown admits the fix by itself: left in place, it holds the "
+            "package on that release."
         )
     return FixPlan(status, items=items, diff=diff, note=note)
 
@@ -701,7 +803,9 @@ def print_fix_plan(plan: FixPlan, file: Any) -> None:
         if item.published:
             how = (
                 f"exempt it from your exclude-newer cooldown, only up to this release "
-                f"(published {item.published[:10]})"
+                f"(published {item.published[:10]}"
+                + (f"; remove the entry after {item.expires}" if item.expires else "")
+                + ")"
             )
         elif item.also_upgrade:
             moved = ", ".join(s.replace("==", " → ") for s in item.also_upgrade)

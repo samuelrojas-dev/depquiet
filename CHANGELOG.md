@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cooldown. Existing exemptions are kept; the entry goes to `pyproject.toml` or `uv.toml`,
   wherever `exclude-newer` is set. This is the narrow exemption uv's maintainers suggest
   instead of a blanket bypass (astral-sh/uv#18995). Verified end to end with uv 0.11.32.
+- **Every scan warns about stale `exclude-newer-package` entries**: a per-package date
+  older than the project's own cut-off holds that package on old releases (with a
+  rolling `"7 days"` cooldown, uv moved requests back from 2.34.2 to 2.32.4 in a real
+  run). With a rolling cooldown, `--fix-plan` prints the date after which to remove the
+  entry it writes (`remove_after` in JSON). Package names with a dot are quoted and
+  Windows line endings are kept when the entry is written.
 
 ## [0.43.0] - 2026-11-13
 
