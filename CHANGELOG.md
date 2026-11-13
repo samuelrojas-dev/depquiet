@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `SECURITY.md` said depquiet "never runs code from scanned projects", that its only
+  network call was EPSS, and that 0.1.x was the supported version. None of that was true:
+  some modes start pip-audit, uv or npm, which can run build code or install scripts, and
+  KEV, OSV.dev and PyPI are also reached. It now lists, per mode, what runs and whether it
+  can execute project code, what is sent where, which project files can dismiss alerts,
+  and that only the latest release gets fixes.
+
 ## [0.44.0] - 2026-11-13
 
 ### Added
