@@ -15,7 +15,7 @@ when the lockfile proves it.
 
 ### On real projects
 
-`pip-audit` on popular Python projects, at their head on 2026-11-11, measured with depquiet 0.40.0:
+`pip-audit` on popular Python projects at their head, measured on 2026-11-11 and again on 2026-11-12 with depquiet 0.39.0, with the same results:
 
 | Project | pip-audit alerts | Only reach dev tooling | Left to look at |
 |:--|--:|--:|--:|

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- The README's headline table said it was measured with depquiet 0.40.0; the study that
+  produced it records 0.39.0 (0.40.0 was only the version bumped in the same commit).
+
+### Added
+- `benchmarks/fixcheck_study/remeasure.sh`: re-measures the headline table with the latest
+  release in a disposable VM. One pip-audit run per project, given to both 0.39.0 and the
+  latest release, so differences come from depquiet and not from new advisories.
+
 ## [0.44.1] - 2026-11-13
 
 ### Fixed
