@@ -38,6 +38,7 @@ from __future__ import annotations
 import difflib
 import re
 import shutil
+import subprocess
 import tempfile
 import tomllib
 from dataclasses import dataclass, field
@@ -46,7 +47,7 @@ from pathlib import Path
 from typing import Any
 
 from depquiet.fixcheck import FixCheck, _explain, _pep503, _run_lock, fix_targets
-from depquiet.models import ScanResult, version_key
+from depquiet.models import ScanResult, Verdict, version_key
 
 _REQUIREMENT = re.compile(
     r"^\s*(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)\s*(?P<extras>\[[^\]]*\])?\s*"
@@ -789,6 +790,119 @@ def _diff(project: Path, edits: list[PlanEdit]) -> str:
             )
         )
     return "".join(chunks)
+
+
+def apply_fix_plan(plan: FixPlan, project: Path, *, timeout: int = 900) -> str:
+    """Apply a verified plan to the project itself: edit the files, then relock.
+
+    Returns "" on success, or what went wrong. On any failure every file is
+    put back exactly as it was, ``uv.lock`` included, so a failed apply never
+    leaves the project half-changed.
+    """
+    executable = shutil.which("uv")
+    if executable is None:
+        return "uv is not on PATH."
+    if not plan.included:
+        return "the plan has no fix to apply."
+    edits = [e for item in plan.included for e in item.edits]
+    touched = sorted({e.file for e in edits} | {"uv.lock"})
+    before = {name: (project / name).read_bytes() for name in touched if (project / name).is_file()}
+
+    def restore() -> None:
+        for name, data in before.items():
+            (project / name).write_bytes(data)
+
+    try:
+        _apply(project, edits)
+        cmd = [executable, "lock"]
+        for spec in plan.command.split()[2:]:
+            cmd.append(spec)
+        r = subprocess.run(
+            cmd,
+            cwd=project,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        restore()
+        return f"uv lock timed out after {timeout} s; nothing was changed."
+    except OSError as e:
+        restore()
+        return f"could not apply the plan ({e}); nothing was changed."
+    if r.returncode != 0:
+        restore()
+        tail = " ".join((r.stderr or r.stdout).split())[-300:]
+        return f"uv lock failed, nothing was changed: {tail}"
+    return ""
+
+
+def _how(item: PlanItem) -> str:
+    own = [e for e in item.edits if _pep503(e.package) == _pep503(item.package)]
+    if item.published:
+        text = (
+            "exempted from the `exclude-newer` cooldown, only up to this release "
+            f"(published {item.published[:10]})"
+        )
+        return text + (f"; remove the entry after {item.expires}" if item.expires else "")
+    if item.also_upgrade:
+        moved = ", ".join(f"`{s.replace('==', '` → ')}" for s in item.also_upgrade)
+        return f"also moves {moved}, which held it back"
+    if own:
+        return "widens the project's own requirement"
+    return "lockfile upgrade"
+
+
+def fix_plan_markdown(plan: FixPlan, result: ScanResult, version: str = "") -> str:
+    """The plan as a pull request description."""
+
+    def cell(text: str) -> str:
+        return " ".join(str(text).split()).replace("|", "\\|")
+
+    advisories: dict[str, list[str]] = {}
+    for r in result.results:
+        if r.verdict is not Verdict.FILTERED:
+            known = advisories.setdefault(_pep503(r.vuln.package), [])
+            if r.vuln.cve not in known:
+                known.append(r.vuln.cve)
+    n = len(plan.included)
+    confirmed = "this fix installs" if n == 1 else f"these {n} fixes install together"
+    lines = [
+        "## Security fixes verified by depquiet",
+        "",
+        f"uv's resolver confirmed that {confirmed}. This pull request changes only "
+        "`pyproject.toml`/`uv.toml` requirements and `uv.lock`.",
+        "",
+        "| Package | From | To | Advisories | How |",
+        "|---|---|---|---|---|",
+    ]
+    for item in plan.included:
+        ids = ", ".join(advisories.get(_pep503(item.package), [])[:6]) or "-"
+        major = " **(major version change)**" if item.major_jump else ""
+        lines.append(
+            f"| `{cell(item.package)}` | {cell(item.installed or '?')} "
+            f"| {cell(item.version)}{major} | {cell(ids)} | {cell(_how(item))} |"
+        )
+    if plan.left_out:
+        lines += ["", "### Not included", ""]
+        lines += [
+            f"- `{cell(i.package)}` → {cell(i.version)}: {cell(i.why[:300])}" for i in plan.left_out
+        ]
+    by = f" {version}" if version else ""
+    lines += [
+        "",
+        "### Before merging",
+        "",
+        "- " + plan.note,
+        "- depquiet checked that the versions resolve, not that your code works with them: "
+        "let your tests decide.",
+        "",
+        "---",
+        f"Opened by [depquiet](https://github.com/samuelrojas-dev/depquiet){by}.",
+    ]
+    return "\n".join(lines) + "\n"
 
 
 def print_fix_plan(plan: FixPlan, file: Any) -> None:

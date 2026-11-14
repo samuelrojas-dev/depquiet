@@ -34,7 +34,14 @@ from depquiet.engine import scan
 from depquiet.finding_identity import parse_report, validate_project_id
 from depquiet.fix import apply_fixes, print_fix_report
 from depquiet.fixcheck import check_fixes
-from depquiet.fixplan import FixPlan, build_fix_plan, print_fix_plan, stale_exemptions
+from depquiet.fixplan import (
+    FixPlan,
+    apply_fix_plan,
+    build_fix_plan,
+    fix_plan_markdown,
+    print_fix_plan,
+    stale_exemptions,
+)
 from depquiet.html_report import write_html
 from depquiet.ignore import apply_ignores, load_ignore, print_ignore_warnings
 from depquiet.kev import KevCatalog, apply_kev, fetch_kev_catalog, load_kev_from_file
@@ -572,6 +579,19 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
         "Changes nothing in the project. Trusted code only, like --check-fixes",
     )
     parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="With --fix-plan: apply the verified plan to the project (edit pyproject.toml "
+        "or uv.toml, then run uv lock). If uv lock fails, every file is put back as it was",
+    )
+    parser.add_argument(
+        "--fix-plan-report",
+        type=Path,
+        default=None,
+        metavar="FILE",
+        help="With --fix-plan: write the plan as Markdown (a pull request description)",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Show what --fix would do without changing anything",
@@ -836,6 +856,23 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
             )
         elif fix_plan.diff and not args.json_output:
             print(fix_plan.diff)
+        if args.fix_plan_report is not None and fix_plan.included:
+            args.fix_plan_report.write_text(
+                fix_plan_markdown(fix_plan, result, __version__), encoding="utf-8"
+            )
+        if args.apply and fix_plan.included:
+            problem = apply_fix_plan(fix_plan, args.path)
+            if problem:
+                print(f"Error: --apply: {problem}", file=sys.stderr)
+                return 2
+            print(
+                "   Applied: the files above are edited and uv.lock is updated. "
+                "Run your tests before you commit.",
+                file=sys.stderr,
+            )
+    if args.apply and args.fix_plan is None:
+        print("Error: --apply needs --fix-plan.", file=sys.stderr)
+        return 2
 
     if merged.sarif:
         write_sarif(result, merged.sarif)

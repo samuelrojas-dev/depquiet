@@ -107,6 +107,18 @@ inputs:
     description: "Install pip-audit so Python projects are audited (set false if your workflow installs it, or to use uv audit)"
     required: false
     default: "true"
+  fix-pr:
+    description: "uv projects: open (or update) one pull request with every fix that uv's resolver confirms installs together: requirement changes in pyproject.toml/uv.toml plus uv.lock (true/false). Skipped on pull_request events. Needs contents: write and pull-requests: write. Runs uv lock: trusted code only."
+    required: false
+    default: "false"
+  fix-pr-branch:
+    description: "Branch for the fix pull request. It is force-pushed on every run: do not commit to it by hand."
+    required: false
+    default: "depquiet/security-fixes"
+  fix-pr-token:
+    description: "Token that pushes the branch and opens the pull request. With the default GITHUB_TOKEN, GitHub does not start your CI workflows on that pull request: pass a personal access token or GitHub App token to have them run."
+    required: false
+    default: ${{ github.token }}
 
 outputs:
   total:
@@ -133,6 +145,9 @@ outputs:
   diff-fixed:
     description: "Number of fixed findings in diff (when diff-base is set)"
     value: ${{ steps.diff.outputs.fixed }}
+  fix-pr-url:
+    description: "URL of the fix pull request (when fix-pr opened or updated one)"
+    value: ${{ steps.fixpr.outputs.url }}
 
 runs:
   using: "composite"
@@ -147,6 +162,7 @@ runs:
       env:
         INPUT_INSTALL_PIP_AUDIT: ${{ inputs.install-pip-audit }}
         INPUT_CHECK_FIXES: ${{ inputs.check-fixes }}
+        INPUT_FIX_PR: ${{ inputs.fix-pr }}
       # Install the action's own code, so @v0.35.0 runs 0.35.0 and a fresh
       # tag works before PyPI's index lists it. pip-audit is depquiet's
       # scanner for Python projects; without it they fall back to OSV.dev.
@@ -155,7 +171,7 @@ runs:
         if [ "$INPUT_INSTALL_PIP_AUDIT" = "true" ]; then
           python -m pip install --disable-pip-version-check pip-audit
         fi
-        if [ "$INPUT_CHECK_FIXES" = "true" ] && ! command -v uv >/dev/null 2>&1; then
+        if { [ "$INPUT_CHECK_FIXES" = "true" ] || [ "$INPUT_FIX_PR" = "true" ]; } && ! command -v uv >/dev/null 2>&1; then
           python -m pip install --disable-pip-version-check uv
         fi
         depquiet --version
@@ -185,6 +201,7 @@ runs:
         INPUT_ANNOTATIONS: ${{ inputs.annotations }}
         INPUT_VEX: ${{ inputs.vex }}
         INPUT_CHECK_FIXES: ${{ inputs.check-fixes }}
+        INPUT_FIX_PR: ${{ inputs.fix-pr }}
       run: |
         SCAN_DIR=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/depquiet.XXXXXX")
         SCAN_FILE="$SCAN_DIR/scan.json"
@@ -266,6 +283,21 @@ runs:
 
         if [ "$INPUT_CHECK_FIXES" = "true" ]; then
           ARGS+=(--check-fixes)
+        fi
+
+        # The fix pull request: apply the verified plan here, push it in a
+        # later step. Never on pull request events: uv lock can run build
+        # hooks, and that step holds a token with write access.
+        if [ "$INPUT_FIX_PR" = "true" ]; then
+          case "${GITHUB_EVENT_NAME:-}" in
+            pull_request|pull_request_target)
+              echo "::notice::depquiet: fix-pr is skipped on pull request events."
+              ;;
+            *)
+              ARGS+=(--fix-plan "$SCAN_DIR/fix-plan.diff" --apply --fix-plan-report "$SCAN_DIR/fix-pr.md")
+              echo "fix_report=$SCAN_DIR/fix-pr.md" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
         fi
 
         # Job summary — always write when GITHUB_STEP_SUMMARY is available
@@ -437,6 +469,64 @@ runs:
           done
         fi
         gh pr comment "$PR_NUMBER" --body "$COMMENT"
+
+    - name: Open fix pull request
+      id: fixpr
+      if: always() && inputs.fix-pr == 'true' && steps.run.outputs.fix_report != ''
+      shell: bash
+      env:
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_FIX_PR_BRANCH: ${{ inputs.fix-pr-branch }}
+        FIX_REPORT: ${{ steps.run.outputs.fix_report }}
+        GH_TOKEN: ${{ inputs.fix-pr-token }}
+      run: |
+        set -euo pipefail
+        if [ ! -s "$FIX_REPORT" ]; then
+          echo "depquiet: no fix that uv's resolver confirms; no pull request."
+          exit 0
+        fi
+        if [ "${GITHUB_REF_TYPE:-}" != "branch" ] || [ -z "${GITHUB_REF_NAME:-}" ]; then
+          echo "::warning::depquiet: fix-pr needs a run on a branch; skipped."
+          exit 0
+        fi
+        BASE="$GITHUB_REF_NAME"
+        BRANCH="$INPUT_FIX_PR_BRANCH"
+        if [ -z "$BRANCH" ] || [ "$BRANCH" = "$BASE" ]; then
+          echo "::error::depquiet: fix-pr-branch must be a branch other than $BASE."
+          exit 2
+        fi
+        cd "$INPUT_PATH"
+        # Only what the plan changes: requirement files and the lockfile.
+        # ls-files, not "git add" with pathspecs: add fails when one matches nothing.
+        git ls-files -z -m -- ':(glob)**/pyproject.toml' ':(glob)**/uv.toml' ':(glob)**/uv.lock' \
+          | xargs -0 -r git add --
+        if git diff --cached --quiet; then
+          echo "depquiet: the plan changed no tracked file; no pull request."
+          exit 0
+        fi
+        TITLE="fix(deps): security fixes verified by depquiet"
+        git -c user.name="github-actions[bot]" \
+          -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+          commit -q -m "$TITLE"
+        # Push with the given token even when checkout left its own credentials.
+        SERVER="${GITHUB_SERVER_URL:-https://github.com}"
+        git -c "http.${SERVER}/.extraheader=" push -q --force \
+          "${SERVER/https:\/\//https://x-access-token:${GH_TOKEN}@}/${GITHUB_REPOSITORY}.git" \
+          "HEAD:refs/heads/$BRANCH"
+        # Leave the checkout as the workflow had it.
+        git reset -q --hard HEAD~1
+        EXISTING=$(gh pr list --head "$BRANCH" --base "$BASE" --state open --json number --jq '.[0].number // empty')
+        if [ -n "$EXISTING" ]; then
+          gh pr edit "$EXISTING" --title "$TITLE" --body-file "$FIX_REPORT" >/dev/null
+          URL=$(gh pr view "$EXISTING" --json url --jq .url)
+        else
+          if ! URL=$(gh pr create --head "$BRANCH" --base "$BASE" --title "$TITLE" --body-file "$FIX_REPORT"); then
+            echo "::error::depquiet: could not open the pull request. Check that the job has 'pull-requests: write' and that Settings > Actions > General allows GitHub Actions to create pull requests."
+            exit 2
+          fi
+        fi
+        echo "url=$URL" >> "$GITHUB_OUTPUT"
+        echo "depquiet: fix pull request: $URL"
 
     - name: Upload SARIF to GitHub
       if: inputs.sarif != '' && always()
