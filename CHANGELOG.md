@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`fix-pr`: one pull request with every fix that installs.** `--fix-plan --apply`
+  applies the verified plan to the project (requirement edits, then `uv lock`; if the lock
+  fails, every file is put back). `--fix-plan-report FILE` writes the plan as a pull
+  request description. The Action's `fix-pr` input does both on a schedule and opens or
+  updates one pull request (`fix-pr-branch`, `fix-pr-token`, output `fix-pr-url`). It
+  covers what Dependabot leaves as `update_not_possible` in Python projects: a parent
+  that must move to fix a vulnerable transitive dependency (dependabot-core#16337).
+  Verified with uv 0.11.32 on a project where botocore held urllib3 back: 10 alerts
+  before, 0 after. uv projects only; never runs on pull request events.
+
 ### Fixed
 - The README's headline table said it was measured with depquiet 0.40.0; the study that
   produced it records 0.39.0 (0.40.0 was only the version bumped in the same commit).

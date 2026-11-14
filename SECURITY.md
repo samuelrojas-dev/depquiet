@@ -35,10 +35,12 @@ from the project or its dependencies:
 | Scan of a `pyproject.toml` with no lockfile | `pip-audit <project>`, which builds and installs the project | Yes: the project's build backend |
 | npm scan | `npm audit --json` | No |
 | `--check-fixes`, `--fix-plan` | `uv lock --dry-run` (on a temporary copy for `--fix-plan`) | Yes: uv can run build hooks |
+| `--fix-plan --apply`, the Action's `fix-pr` | `uv lock --upgrade-package` on the project | Yes: uv can run build hooks |
 | `--fix` | `uv lock --upgrade-package`, or `npm install pkg@version` | Yes: npm runs install scripts |
 
 Run those modes on code you trust, as you would `pip install` or `npm install`. In CI,
-treat a pull request from a fork accordingly. `--stdin` and `--from-sbom` read a report you
+treat a pull request from a fork accordingly; the Action's `fix-pr` refuses to run on pull
+request events, because that step holds a token that can push. `--stdin` and `--from-sbom` read a report you
 produced and start no scanner.
 
 ## What depquiet sends over the network
