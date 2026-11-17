@@ -842,6 +842,24 @@ def _is_group_include(spec: object, groups: dict[str, object]) -> bool:
     )
 
 
+def _uv_default_groups(data: dict[str, Any], groups: dict[str, object]) -> set[str]:
+    """Groups uv installs even in a production sync, so they are production.
+
+    ``uv sync`` installs ``tool.uv.default-groups``, and the usual production
+    command, ``uv sync --no-dev``, leaves out only the group named ``dev``:
+    with ``default-groups = "all"`` or ``["docs"]`` a docs group ships.
+    """
+    uv = ((data.get("tool") or {}).get("uv")) or {}
+    declared = uv.get("default-groups") if isinstance(uv, dict) else None
+    if declared == "all":
+        names = set(groups)
+    elif isinstance(declared, list):
+        names = {g for g in declared if isinstance(g, str)}
+    else:
+        return set()
+    return names - {"dev"}
+
+
 def _load_pyproject(path: Path) -> DependencyGraph | None:
     """PEP 621, PEP 735 dependency groups and Poetry.
 
@@ -884,8 +902,9 @@ def _load_pyproject(path: Path) -> DependencyGraph | None:
         if static is not None:
             entries += [(_req_name(s), False) for s in static]
             unlisted = False
+    shipped = _uv_default_groups(data, groups)
     for group_name, group in (data.get("dependency-groups") or {}).items():
-        dev = _is_dev_group(group_name)
+        dev = _is_dev_group(group_name) and group_name not in shipped
         entries += [(_req_name(s), dev) for s in group if isinstance(s, str)]
     poetry = (data.get("tool") or {}).get("poetry") or {}
     entries += [(n, False) for n in poetry.get("dependencies") or {}]
