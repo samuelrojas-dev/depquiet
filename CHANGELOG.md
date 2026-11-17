@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `depquiet baseline create` says why when it accepts nothing: baseline v2 accepts npm
+  component evidence only, so on a Python scan it suppressed no alert while reporting
+  success. It now names the alternative (`depquiet --baseline <scan.json>`).
+- The baseline note agrees in number ("1 known finding suppressed").
+
 ## [0.47.6] - 2026-11-17
 
 ### Fixed

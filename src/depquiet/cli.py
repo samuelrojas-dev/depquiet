@@ -200,6 +200,14 @@ def baseline_main(argv: list[str]) -> int:
         f"{len(document['unaccepted'])} contexts remain unaccepted.",
         file=sys.stderr,
     )
+    if not document["accepted"] and document["unaccepted"]:
+        # Creation succeeds with nothing accepted: say why, or it reads as done.
+        print(
+            "Nothing was accepted: baseline v2 accepts npm component evidence only, so this "
+            "baseline suppresses no alert. For other scanners, pass the saved scan itself: "
+            f"depquiet --baseline {args.scan}",
+            file=sys.stderr,
+        )
     return 0
 
 
@@ -831,10 +839,15 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
         except (OSError, ValueError, TypeError) as exc:
             print(f"Error: cannot apply baseline: {exc}", file=sys.stderr)
             return 2
-        notices.append(
-            f"📊 Baseline: {bl.known_findings} known findings suppressed, "
-            f"{bl.new_findings} new findings remain"
+        known = (
+            "1 known finding" if bl.known_findings == 1 else f"{bl.known_findings} known findings"
         )
+        new = (
+            "1 new finding remains"
+            if bl.new_findings == 1
+            else f"{bl.new_findings} new findings remain"
+        )
+        notices.append(f"📊 Baseline: {known} suppressed, {new}")
 
     # Apply KEV escalation — auto-escalate actively exploited CVEs
     if merged.kev or merged.kev_file:
