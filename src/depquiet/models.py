@@ -21,6 +21,27 @@ class Severity(Enum):
     def from_str(cls, s: str) -> Severity:
         return cls(s.lower()) if s.lower() in cls._value2member_map_ else cls.MODERATE
 
+    @classmethod
+    def parse(cls, s: object) -> Severity | None:
+        """The severity a scanner stated, or None when it stated none.
+
+        "unknown", an empty value or anything unrecognized is None: such an
+        alert is stored as MODERATE with ``severity_known=False``, and nothing
+        may treat that placeholder as a measured severity.
+        """
+        word = str(s or "").strip().lower()
+        if word in cls._value2member_map_:
+            return cls(word)
+        return _SEVERITY_SYNONYMS.get(word)
+
+
+# Words scanners use for the same levels. "negligible" (Grype) is below low.
+_SEVERITY_SYNONYMS = {
+    "medium": Severity.MODERATE,
+    "informational": Severity.INFO,
+    "negligible": Severity.INFO,
+}
+
 
 class Verdict(Enum):
     """Remediation priority, independent of proven product impact."""

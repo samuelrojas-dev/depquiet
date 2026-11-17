@@ -58,7 +58,10 @@ class PolicyRule:
         """Check if this rule matches a triage result."""
         v = tr.vuln
 
-        if self.severity is not None and v.severity not in self.severity:
+        # An alert without a stated severity carries a placeholder: it can
+        # never satisfy a severity condition (a "dismiss moderate" rule would
+        # otherwise hide every pip-audit alert).
+        if self.severity is not None and (not v.severity_known or v.severity not in self.severity):
             return False
 
         if self.packages is not None and v.package not in self.packages:

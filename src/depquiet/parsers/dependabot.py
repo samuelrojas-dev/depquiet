@@ -70,8 +70,8 @@ class DependabotParser:
             advisory = alert.get("security_advisory", {})
             cve_id = advisory.get("cve_id") or advisory.get("ghsa_id", "")
             summary = advisory.get("summary", "")
-            severity_str = advisory.get("severity", "moderate")
-            severity = Severity.from_str(severity_str)
+            measured = Severity.parse(advisory.get("severity"))
+            severity = measured or Severity.MODERATE
 
             # Extract fix version
             sec_vuln = alert.get("security_vulnerability", {})
@@ -95,6 +95,7 @@ class DependabotParser:
                     package=pkg_name,
                     version=vuln_range,
                     severity=severity,
+                    severity_known=measured is not None,
                     title=short_title(summary) if summary else cve_id,
                     url=url,
                     fix_version=fix_version,

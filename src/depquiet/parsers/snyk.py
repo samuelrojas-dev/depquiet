@@ -99,7 +99,8 @@ class SnykParser:
             seen.add(key)
 
             # Severity
-            severity = Severity.from_str(entry.get("severity", "moderate"))
+            measured = Severity.parse(entry.get("severity"))
+            severity = measured or Severity.MODERATE
 
             # Title — truncate to 120 chars
             title = entry.get("title", "")
@@ -125,6 +126,7 @@ class SnykParser:
                     package=pkg,
                     version=entry.get("version", ""),
                     severity=severity,
+                    severity_known=measured is not None,
                     title=title,
                     url=url,
                     fix_version=fix_version,

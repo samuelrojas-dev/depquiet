@@ -87,7 +87,8 @@ class TrivyParser:
                     continue
                 seen.add(key)
 
-                severity = Severity.from_str(entry.get("Severity", "MODERATE").lower())
+                measured = Severity.parse(entry.get("Severity"))
+                severity = measured or Severity.MODERATE
                 title = entry.get("Title", cve)
                 url = entry.get("PrimaryURL", "")
                 fix_version = entry.get("FixedVersion", "")
@@ -99,6 +100,7 @@ class TrivyParser:
                         package=pkg,
                         version=installed,
                         severity=severity,
+                        severity_known=measured is not None,
                         title=short_title(title) if title else cve,
                         url=url,
                         fix_version=fix_version,

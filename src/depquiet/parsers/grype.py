@@ -78,7 +78,8 @@ class GrypeParser:
                 continue
             seen.add(key)
 
-            severity = Severity.from_str(vuln_data.get("severity", "Medium").lower())
+            measured = Severity.parse(vuln_data.get("severity"))
+            severity = measured or Severity.MODERATE
 
             # Fix version: modern Grype uses fix.versions[], older uses fixedInVersion
             fix_data = vuln_data.get("fix", {})
@@ -100,6 +101,7 @@ class GrypeParser:
                     package=pkg,
                     version=installed,
                     severity=severity,
+                    severity_known=measured is not None,
                     title=title,
                     url=url,
                     fix_version=fix_version,

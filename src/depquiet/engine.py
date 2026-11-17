@@ -562,7 +562,16 @@ def scan(
 
     # Sort: ACTION first, then REVIEW, then FILTERED
     order = {Verdict.ACTION: 0, Verdict.REVIEW: 1, Verdict.FILTERED: 2}
-    results.sort(key=lambda r: (order[r.verdict], r.vuln.severity.value))
+    rank = {
+        Severity.CRITICAL: 0,
+        Severity.HIGH: 1,
+        Severity.MODERATE: 2,
+        Severity.LOW: 3,
+        Severity.INFO: 4,
+    }
+    results.sort(
+        key=lambda r: (order[r.verdict], rank[r.vuln.severity] if r.vuln.severity_known else 2)
+    )
 
     return ScanResult(
         project_path=str(project),

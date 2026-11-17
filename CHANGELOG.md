@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.47.2] - 2026-11-17
+
+### Fixed
+- **A policy rule on severity could hide every alert of unknown severity.** pip-audit and
+  uv audit report no severity; depquiet stores such an alert as `moderate` and marks the
+  severity unknown. Policy rules ignored that mark, so `severity: moderate` with
+  `action: filter` dismissed every pip-audit alert of a project, and the scan passed with
+  exit 0. A `severity` condition now never matches an unknown severity.
+- **Trivy, Grype, npm, pnpm, Snyk, Dependabot and SARIF reports with no severity** (absent,
+  empty, or `UNKNOWN`) were read as a measured `moderate`. They are now unknown, as for
+  pip-audit, so reports, `--fail-on`, SARIF levels and policies treat them as unknown. Grype's
+  `Negligible` reads as info; a SARIF `security-severity` CVSS score in a result's properties
+  reads as its score's level instead of `moderate`.
+- `depquiet stats --from-json` counted unknown severities as moderate.
+- Results within a verdict were sorted by the severity's name (critical, high, info, low,
+  moderate), so `--json` listed low before moderate. They are sorted by level.
+- `depquiet --help` lists `stats` and `init`; two warnings said "alert(s)" and
+  "suppression(s)".
+
 ## [0.47.1] - 2026-11-17
 
 ### Fixed
@@ -1188,7 +1207,8 @@ requirements.txt and npm projects:
 - CI workflow with lint, typecheck, test matrix (3.11/3.12/3.13), and build
 - Automated release workflow with trusted PyPI publishing
 
-[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.1...HEAD
+[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.2...HEAD
+[0.47.2]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.1...v0.47.2
 [0.47.1]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.0...v0.47.1
 [0.47.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.46.0...v0.47.0
 [0.46.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.45.2...v0.46.0

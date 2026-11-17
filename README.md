@@ -1460,6 +1460,10 @@ All conditions on a rule must match (AND logic):
 | `has_fix` | bool | Match vulnerabilities with a known fix |
 | `cves` | string or list | Specific CVE IDs |
 
+An alert whose scanner states no severity (pip-audit, uv audit, or `"Severity": "UNKNOWN"`
+from Trivy or Grype) never matches a `severity` condition: depquiet does not guess one, so a
+rule that dismisses `moderate` alerts cannot dismiss alerts of unknown severity.
+
 A rule with an unknown key (`severty:`), an unknown severity or an EPSS bound that is not a
 number between 0 and 1 is skipped with a warning: dropping just that condition would widen the
 rule to every finding. A trailing `# comment` on a line is ignored.

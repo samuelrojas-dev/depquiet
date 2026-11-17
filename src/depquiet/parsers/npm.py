@@ -87,7 +87,8 @@ class NpmAuditParser:
 
         raw_vulns = audit_json.get("vulnerabilities", {})
         for pkg_name, pkg_data in raw_vulns.items():
-            severity = Severity.from_str(pkg_data.get("severity", "moderate"))
+            measured = Severity.parse(pkg_data.get("severity"))
+            severity = measured or Severity.MODERATE
             is_direct = pkg_data.get("isDirect", False)
             is_dev = pkg_name in dev_packages
 
@@ -145,6 +146,7 @@ class NpmAuditParser:
                         package=pkg_name,
                         version=advisory_range,
                         severity=severity,
+                        severity_known=measured is not None,
                         title=title,
                         url=url,
                         fix_version=fix_version,
