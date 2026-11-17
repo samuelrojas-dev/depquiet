@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.47.3] - 2026-11-17
+
+### Fixed
+- **`--sbom` listed only the packages with an alert.** The SBOM was documented as a full
+  component inventory, but the lockfile's packages never reached it: the demo project's
+  CycloneDX file had 2 of its 9 packages. It now lists every package in the project's
+  lockfiles (or in the SBOM read with `--from-sbom`), and warns when it can only list the
+  packages with an alert. CycloneDX JSON and XML validate against the official 1.5 schemas,
+  and SPDX passes spdx-tools' full validation.
+- **The README's Dependabot command failed with more than one page of alerts.**
+  `gh api .../dependabot/alerts --paginate` prints each page as its own JSON array, and
+  depquiet answered "invalid JSON on stdin". Back-to-back arrays and `--slurp` output are
+  now read as one list.
+- **`snyk test --all-projects --json` was read as Dependabot alerts**, because it is an
+  array: the real alerts were lost and one empty alert was reported. Arrays are now read by
+  what they contain, and an array that is neither is refused.
+- **A SARIF file with only code findings was reported clean.** A result that names no
+  package (CodeQL, Semgrep) is not a dependency alert, and depquiet dropped it silently:
+  Semgrep's output gave "No vulnerabilities found", exit 0. depquiet now says how many it
+  left out, and a file with only code findings is "nothing scanned" (exit 2). The README no
+  longer lists CodeQL and Semgrep as supported inputs.
+- Dependabot keeps the GHSA id, and Snyk every other CVE and its own id, as aliases, so
+  EPSS, KEV, ignores and `explain` find them.
+
 ## [0.47.2] - 2026-11-17
 
 ### Fixed
@@ -1207,7 +1231,8 @@ requirements.txt and npm projects:
 - CI workflow with lint, typecheck, test matrix (3.11/3.12/3.13), and build
 - Automated release workflow with trusted PyPI publishing
 
-[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.2...HEAD
+[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.3...HEAD
+[0.47.3]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.2...v0.47.3
 [0.47.2]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.1...v0.47.2
 [0.47.1]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.0...v0.47.1
 [0.47.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.46.0...v0.47.0

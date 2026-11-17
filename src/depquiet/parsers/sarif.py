@@ -318,3 +318,27 @@ class SarifParser:
     def scan(cls, project: Path) -> list[Vulnerability]:
         """SARIF must be piped via ``--stdin``; scan is a no-op."""
         return []
+
+
+def code_findings(audit_json: dict[str, Any]) -> int:
+    """How many SARIF results name no package: code findings (CodeQL, Semgrep).
+
+    depquiet triages dependency alerts, so these are not read; the caller says
+    so, instead of reporting a clean scan.
+    """
+    count = 0
+    for run in audit_json.get("runs", []):
+        if not isinstance(run, dict):
+            continue
+        rules_list = (run.get("tool", {}).get("driver", {}) or {}).get("rules", []) or []
+        rules_by_id = {r.get("id"): r for r in rules_list if isinstance(r, dict)}
+        for result in run.get("results", []) or []:
+            if not isinstance(result, dict):
+                continue
+            rule = rules_by_id.get(result.get("ruleId", ""))
+            index = result.get("ruleIndex")
+            if rule is None and isinstance(index, int) and 0 <= index < len(rules_list):
+                rule = rules_list[index]
+            if not _extract_package(result, rule):
+                count += 1
+    return count

@@ -83,8 +83,10 @@ class SnykParser:
 
             # Extract CVE from identifiers, fall back to Snyk ID
             identifiers = entry.get("identifiers", {})
-            cves = identifiers.get("CVE", [])
+            cves = [c for c in identifiers.get("CVE", []) or [] if isinstance(c, str)]
             cve = cves[0] if cves else entry.get("id", "")
+            # Every other id stays findable: EPSS, KEV, ignores and explain use aliases.
+            aliases = [a for a in [*cves[1:], entry.get("id", "")] if a and a != cve]
             if not cve:
                 continue
 
@@ -132,6 +134,7 @@ class SnykParser:
                     fix_version=fix_version,
                     is_direct=is_direct,
                     depth=depth,
+                    aliases=aliases,
                 )
             )
 

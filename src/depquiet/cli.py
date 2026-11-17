@@ -51,6 +51,8 @@ from depquiet.kev import KevCatalog, apply_kev, fetch_kev_catalog, load_kev_from
 from depquiet.license import LicenseReport, print_license_report, scan_licenses
 from depquiet.models import ScanResult
 from depquiet.output import print_scan_result
+from depquiet.parsers.osv import parse_lockfiles
+from depquiet.parsers.sbom import SbomParser
 from depquiet.poetryplan import build_poetry_plan, is_poetry_project
 from depquiet.policy import load_policy
 from depquiet.sarif import write_sarif
@@ -771,15 +773,25 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
             return 2
     elif args.stdin:
         try:
-            raw = json.load(sys.stdin)
+            raw = _read_stdin_report(sys.stdin.read())
         except json.JSONDecodeError:
             print("Error: invalid JSON on stdin", file=sys.stderr)
             return 2
         if not isinstance(raw, (dict, list)):
             print("Error: stdin is not a scanner report (expected a JSON object)", file=sys.stderr)
             return 2
-        # Dependabot exports are JSON arrays — wrap for the engine
-        audit_json = {"alerts": raw} if isinstance(raw, list) else raw
+        if isinstance(raw, list):
+            wrapped = _wrap_report_list(raw)
+            if wrapped is None:
+                print(
+                    "Error: stdin is a JSON array that is neither Dependabot alerts nor "
+                    "snyk test --all-projects output",
+                    file=sys.stderr,
+                )
+                return 2
+            audit_json = wrapped
+        else:
+            audit_json = raw
 
     # Load policy (from CLI, config, or project default)
     policy = load_policy(args.path, policy_path=merged.policy)
@@ -962,7 +974,26 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
                 sbom_fmt = "xml"
             else:
                 sbom_fmt = "json"
-        write_sbom(result, merged.sbom, fmt=sbom_fmt)
+        # The inventory comes from the input: the SBOM read with --from-sbom, or
+        # the project's lockfiles. Without either, only the packages with an
+        # alert are known, and the warning says so.
+        unreadable: list[str] = []
+        if args.from_sbom and isinstance(audit_json, dict):
+            inventory = SbomParser.extract_packages(audit_json)
+        else:
+            inventory = parse_lockfiles(args.path, unreadable)
+        write_sbom(result, merged.sbom, fmt=sbom_fmt, packages=inventory or None)
+        if not inventory or unreadable:
+            why = (
+                f"could not read {', '.join(unreadable)}"
+                if unreadable
+                else "no lockfile depquiet can read was found"
+            )
+            print(
+                f"⚠️  {merged.sbom}: {why}, so the SBOM lists only the packages with an "
+                "alert, not a full inventory.",
+                file=sys.stderr,
+            )
 
     if merged.summary:
         write_summary(result, merged.summary)
@@ -1014,6 +1045,53 @@ def _is_direct(tr: Any, package_manager: str) -> bool | None:
     if (tr.vuln.package_manager or package_manager) in _SCANNERS_KNOWING_DIRECT:
         return bool(tr.vuln.is_direct)
     return None
+
+
+def _wrap_report_list(items: list[Any]) -> dict[str, Any] | None:
+    """The report a JSON array on stdin stands for, or None when it is not one.
+
+    Two scanners print arrays: the Dependabot alerts API (one alert per item)
+    and ``snyk test --all-projects --json`` (one report per project).
+    """
+    rows = [item for item in items if isinstance(item, dict)]
+    if len(rows) != len(items):
+        return None
+    if all("security_advisory" in row or "dependency" in row for row in rows):
+        return {"alerts": rows}
+    if rows and all(isinstance(row.get("vulnerabilities"), list) for row in rows):
+        managers = {str(row.get("packageManager", "")) for row in rows} - {""}
+        return {
+            "packageManager": managers.pop() if len(managers) == 1 else "multiple",
+            "vulnerabilities": [v for row in rows for v in row["vulnerabilities"]],
+        }
+    return None
+
+
+def _read_stdin_report(text: str) -> Any:
+    """One JSON report from stdin, including paginated API output.
+
+    ``gh api --paginate`` prints each page as its own JSON array, back to back,
+    and ``--slurp`` wraps the pages in one array: both become a single list.
+    """
+    try:
+        value = json.loads(text)
+    except json.JSONDecodeError:
+        decoder = json.JSONDecoder()
+        pages: list[Any] = []
+        at = 0
+        while True:
+            while at < len(text) and text[at].isspace():
+                at += 1
+            if at == len(text):
+                break
+            page, at = decoder.raw_decode(text, at)
+            pages.append(page)
+        if len(pages) < 2 or not all(isinstance(p, list) for p in pages):
+            raise
+        return [item for page in pages for item in page]
+    if isinstance(value, list) and value and all(isinstance(p, list) for p in value):
+        return [item for page in value for item in page]
+    return value
 
 
 def _plural(n: int, word: str) -> str:

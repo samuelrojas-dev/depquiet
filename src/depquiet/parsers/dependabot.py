@@ -63,6 +63,8 @@ class DependabotParser:
             dep = alert.get("dependency", {})
             pkg_info = dep.get("package", {})
             pkg_name = pkg_info.get("name", "")
+            if not pkg_name:
+                continue  # not an alert this parser can place
             scope = dep.get("scope", "runtime")
             is_dev = scope == "development"
 
@@ -101,6 +103,7 @@ class DependabotParser:
                     fix_version=fix_version,
                     is_direct=True,
                     is_dev=is_dev,
+                    aliases=[g for g in [advisory.get("ghsa_id") or ""] if g and g != cve_id],
                 )
             )
 
