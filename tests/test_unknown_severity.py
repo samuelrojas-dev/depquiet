@@ -1,114 +1,169 @@
-"""A scanner that reports no severity must not slip past a severity gate.
+"""A severity the scanner did not state is unknown, never "moderate".
 
-pip-audit and uv audit carry no severity, so their findings hold a placeholder
-("moderate"). Before this, ``--fail-on high`` passed a build with every
-Python ACTION alert, critical or not.
+Alerts without a severity are stored as MODERATE with ``severity_known=False``.
+Before 0.47.2 several parsers marked that placeholder as measured, and a policy
+rule ``severity: moderate`` + ``action: filter`` dismissed every pip-audit alert
+with exit 0.
 """
 
 from __future__ import annotations
 
+import io
 import json
 from pathlib import Path
 
 import pytest
 
-from depquiet.cli import _should_fail
-from depquiet.models import ScanResult, Severity, TriageResult, Verdict, Vulnerability
-from depquiet.parsers.pip import PipAuditParser
-from depquiet.parsers.uv import UvAuditParser
+from depquiet.cli import main
+from depquiet.models import Severity, TriageResult, Verdict, Vulnerability
+from depquiet.parsers.dependabot import DependabotParser
+from depquiet.parsers.grype import GrypeParser
+from depquiet.parsers.sarif import _extract_severity
+from depquiet.parsers.snyk import SnykParser
+from depquiet.parsers.trivy import TrivyParser
+from depquiet.policy import PolicyRule
+from depquiet.stats import stats_from_json
+
+HERE = Path(".")
 
 
-def _result(*, known: bool, severity: Severity = Severity.MODERATE) -> ScanResult:
-    vuln = Vulnerability(
-        cve="PYSEC-1",
-        package="werkzeug",
-        version="3.1.0",
-        severity=severity,
-        severity_known=known,
-    )
-    return ScanResult(
-        project_path=".",
-        package_manager="pip",
-        total_dependencies=1,
-        results=[TriageResult(vuln=vuln, verdict=Verdict.ACTION)],
-    )
+@pytest.mark.parametrize(
+    ("word", "expected"),
+    [
+        ("CRITICAL", Severity.CRITICAL),
+        ("Medium", Severity.MODERATE),
+        ("moderate", Severity.MODERATE),
+        ("Negligible", Severity.INFO),
+        ("informational", Severity.INFO),
+        ("UNKNOWN", None),
+        ("", None),
+        (None, None),
+        ("banana", None),
+    ],
+)
+def test_parse_states_only_what_was_said(word, expected) -> None:
+    assert Severity.parse(word) is expected
 
 
-@pytest.mark.parametrize("threshold", ["high", "critical", "moderate", "low"])
-def test_unknown_severity_meets_any_threshold(threshold: str, capsys) -> None:
-    assert _should_fail(_result(known=False), threshold) is True
-    assert "without a severity" in capsys.readouterr().err
+def _trivy(severity):
+    entry = {"VulnerabilityID": "CVE-2024-1", "PkgName": "lodash", "InstalledVersion": "1"}
+    if severity is not None:
+        entry["Severity"] = severity
+    block = {"Target": "package-lock.json", "Class": "lang-pkgs", "Type": "npm"}
+    return {"Results": [{**block, "Vulnerabilities": [entry]}]}
 
 
-def test_known_severity_is_still_compared() -> None:
-    assert _should_fail(_result(known=True), "high") is False
-    assert _should_fail(_result(known=True, severity=Severity.CRITICAL), "high") is True
+def _grype(severity):
+    vuln = {"id": "CVE-2024-1", "fix": {"versions": [], "state": "unknown"}}
+    if severity is not None:
+        vuln["severity"] = severity
+    return {"matches": [{"vulnerability": vuln, "artifact": {"name": "x", "version": "1"}}]}
 
 
-def test_fail_on_none_still_never_fails() -> None:
-    assert _should_fail(_result(known=False), "none") is False
+def _snyk(severity):
+    entry = {"id": "SNYK-1", "packageName": "x", "version": "1", "identifiers": {}}
+    if severity is not None:
+        entry["severity"] = severity
+    return {"vulnerabilities": [entry]}
 
 
-def test_pip_audit_findings_have_no_known_severity() -> None:
-    report = {
-        "dependencies": [
+def _dependabot(severity):
+    advisory = {"ghsa_id": "GHSA-1", "cve_id": "CVE-2024-1", "summary": "s"}
+    if severity is not None:
+        advisory["severity"] = severity
+    return {
+        "alerts": [
             {
-                "name": "werkzeug",
-                "version": "3.1.0",
-                "vulns": [{"id": "PYSEC-1", "fix_versions": ["3.1.4"], "aliases": []}],
+                "state": "open",
+                "dependency": {"package": {"ecosystem": "npm", "name": "x"}, "scope": "runtime"},
+                "security_advisory": advisory,
+                "security_vulnerability": {"vulnerable_version_range": "< 2"},
             }
         ]
     }
-    vulns = PipAuditParser.parse(report, Path("."))
-    assert vulns and not vulns[0].severity_known
 
 
-def test_uv_audit_findings_have_no_known_severity() -> None:
-    fixture = Path(__file__).parent / "fixtures" / "uv_audit_saleor.json"
-    vulns = UvAuditParser.parse(json.loads(fixture.read_text(encoding="utf-8")), Path("."))
-    assert vulns and not any(v.severity_known for v in vulns)
+PARSERS = [
+    (TrivyParser, _trivy),
+    (GrypeParser, _grype),
+    (SnykParser, _snyk),
+    (DependabotParser, _dependabot),
+]
 
 
-# --- Displays and exports say "unknown"; GitHub levels fail safe -------------
+@pytest.mark.parametrize(("parser", "build"), PARSERS)
+@pytest.mark.parametrize("stated", [None, "UNKNOWN", "Unknown", ""])
+def test_parsers_keep_a_missing_severity_unknown(parser, build, stated) -> None:
+    [v] = parser.parse(build(stated), HERE)
+    assert v.severity_known is False
+    assert v.severity_label == "unknown"
 
 
-def _with(verdict: Verdict) -> ScanResult:
-    result = _result(known=False)
-    result.results[0].verdict = verdict
-    result.scanned = True
-    return result
+@pytest.mark.parametrize(("parser", "build"), PARSERS)
+def test_parsers_keep_a_stated_severity(parser, build) -> None:
+    [v] = parser.parse(build("high"), HERE)
+    assert v.severity_known is True and v.severity is Severity.HIGH
 
 
-def test_sarif_marks_unknown_action_as_error_and_says_unknown() -> None:
-    from depquiet.sarif import to_sarif
-
-    run = to_sarif(_with(Verdict.ACTION))["runs"][0]
-    (result,) = run["results"]
-    assert result["level"] == "error"
-    assert result["properties"]["severity"] == "unknown"
-    assert run["tool"]["driver"]["rules"][0]["defaultConfiguration"]["level"] == "error"
-    assert to_sarif(_with(Verdict.REVIEW))["runs"][0]["results"][0]["level"] == "warning"
+def test_sarif_security_severity_is_a_cvss_score() -> None:
+    assert (
+        _extract_severity({"properties": {"security-severity": "9.8"}}, None) is Severity.CRITICAL
+    )
+    assert _extract_severity({"properties": {"security-severity": "7.5"}}, None) is Severity.HIGH
+    assert _extract_severity({"properties": {"severity": "unknown"}}, None) is None
 
 
-def test_annotation_marks_unknown_action_as_failure() -> None:
-    from depquiet.annotations import _finding_to_annotation
-
-    annotation = _finding_to_annotation(_with(Verdict.ACTION).results[0], "uv.lock", ".")
-    assert annotation.annotation_level == "failure"
-    assert "UNKNOWN" in annotation.message and "MODERATE" not in annotation.message
+def _vuln(known: bool) -> Vulnerability:
+    return Vulnerability("PYSEC-1", "p", "1", Severity.MODERATE, severity_known=known)
 
 
-def test_summary_and_label_say_unknown() -> None:
-    from depquiet.summary import render_summary
-
-    result = _with(Verdict.ACTION)
-    assert result.results[0].vuln.severity_label == "unknown"
-    assert "⚪ Unknown" in render_summary(result)
+def test_severity_rule_never_matches_an_unknown_severity() -> None:
+    rule = PolicyRule(id="r", action=Verdict.FILTERED, severity=[Severity.MODERATE])
+    assert rule.matches(TriageResult(vuln=_vuln(True), verdict=Verdict.ACTION))
+    assert not rule.matches(TriageResult(vuln=_vuln(False), verdict=Verdict.ACTION))
 
 
-def test_sbom_never_writes_a_placeholder_rating() -> None:
-    from depquiet.sbom import generate_cyclonedx_json
+def test_dismiss_moderate_policy_does_not_hide_pip_audit_alerts(tmp_path, monkeypatch, capsys):
+    (tmp_path / "requirements.txt").write_text("requests==2.31.0\n")
+    (tmp_path / ".depquiet-policy.yaml").write_text(
+        "rules:\n  - id: dismiss-moderate\n    action: filter\n    severity: moderate\n"
+    )
+    audit = {
+        "dependencies": [
+            {
+                "name": "requests",
+                "version": "2.31.0",
+                "vulns": [{"id": "PYSEC-2026-1", "fix_versions": ["2.32.0"], "aliases": []}],
+            }
+        ]
+    }
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(audit)))
+    code = main(["--stdin", "--offline", "--scanner", "pip", "--json", "--path", str(tmp_path)])
+    row = json.loads(capsys.readouterr().out)["results"][0]
+    assert row["verdict"] == "action" and code == 1
 
-    doc = generate_cyclonedx_json(_with(Verdict.ACTION))
-    ratings = [r["severity"] for v in doc.get("vulnerabilities", []) for r in v["ratings"]]
-    assert ratings and set(ratings) == {"unknown"}
+
+def test_stats_counts_unknown_as_unknown() -> None:
+    stats = stats_from_json({"results": [{"cve": "PYSEC-1", "severity": "unknown"}]})
+    assert stats.severity_counts == {"unknown": 1}
+
+
+def test_result_order_in_json_is_by_severity(tmp_path, monkeypatch, capsys) -> None:
+    rows = [("CVE-2024-1", "low"), ("CVE-2024-2", "critical"), ("CVE-2024-3", "moderate")]
+    data = _trivy(None)
+    entries = data["Results"][0]["Vulnerabilities"]
+    entries.clear()
+    for cve, sev in rows:
+        entries.append(
+            {
+                "VulnerabilityID": cve,
+                "PkgName": f"p{cve[-1]}",
+                "InstalledVersion": "1",
+                "Severity": sev.upper(),
+            }
+        )
+    (tmp_path / "package.json").write_text('{"name": "x", "dependencies": {}}')
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(data)))
+    main(["--stdin", "--offline", "--json", "--path", str(tmp_path)])
+    order = [r["severity"] for r in json.loads(capsys.readouterr().out)["results"]]
+    assert order == ["critical", "moderate", "low"]

@@ -483,6 +483,8 @@ other commands:
   depquiet explain <ID>             why one alert got its verdict
   depquiet diff OLD.json NEW.json   new, fixed and changed findings between two scans
   depquiet baseline ...             record accepted findings (see depquiet baseline -h)
+  depquiet stats --from-json F      counts by verdict, reason and severity
+  depquiet init                     write a .depquiet.yaml for this project
 
 Python projects need pip-audit (pip install pip-audit) or uv; npm projects need npm.""",
     )
@@ -1060,10 +1062,10 @@ def _should_fail(result: ScanResult, fail_on: str | None) -> bool:
         if rank >= threshold:
             return True
     if unknown:
+        alerts = "1 ACTION alert comes" if unknown == 1 else f"{unknown} ACTION alerts come"
         print(
-            f"depquiet: --fail-on {fail_on}: {unknown} ACTION alert(s) come without a "
-            "severity from the scanner (pip-audit and uv audit report none), so they "
-            "count as meeting the threshold.",
+            f"depquiet: --fail-on {fail_on}: {alerts} without a severity from the scanner "
+            "(pip-audit and uv audit report none), so they count as meeting the threshold.",
             file=sys.stderr,
         )
         return True

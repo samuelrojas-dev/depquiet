@@ -180,13 +180,15 @@ def _extract_severity(result: dict[str, Any], rule: dict[str, Any] | None) -> Se
                 pass
 
     # Explicit severity in properties
+    # security-severity is normally a CVSS score ("7.5"), sometimes a word.
     for key in ("severity", "security-severity"):
-        sev = props.get(key, "")
-        if sev:
-            try:
-                return Severity.from_str(str(sev))
-            except Exception:
-                pass
+        value = props.get(key, "")
+        try:
+            return _severity_from_cvss(float(value))
+        except (ValueError, TypeError):
+            named = Severity.parse(value)
+            if named is not None:
+                return named
 
     # rule.properties may have security-severity (CodeQL pattern)
     if rule:
@@ -197,13 +199,9 @@ def _extract_severity(result: dict[str, Any], rule: dict[str, Any] | None) -> Se
                 return _severity_from_cvss(float(sec_sev))
             except (ValueError, TypeError):
                 pass
-        for key in ("severity",):
-            sev = rule_props.get(key, "")
-            if sev:
-                try:
-                    return Severity.from_str(str(sev))
-                except Exception:
-                    pass
+        named = Severity.parse(rule_props.get("severity"))
+        if named is not None:
+            return named
 
     # SARIF level
     level = result.get("level", "")

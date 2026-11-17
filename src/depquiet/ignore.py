@@ -331,7 +331,8 @@ def print_ignore_warnings(ignore_file: IgnoreFile) -> None:
         return
 
     print(
-        f"\n⚠️  {len(expired)} expired suppression(s) in {ignore_file.path}:",
+        f"\n⚠️  {len(expired)} expired {'suppression' if len(expired) == 1 else 'suppressions'} "
+        f"in {ignore_file.path}:",
         file=sys.stderr,
     )
     for entry in expired:

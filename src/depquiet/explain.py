@@ -438,11 +438,11 @@ def find_cve_in_json(data: dict[str, Any], cve_id: str) -> TriageResult | None:
         cve=entry["cve"],
         package=entry.get("package", ""),
         version=entry.get("version", ""),
-        severity=Severity.from_str(entry.get("severity", "moderate")),
+        severity=Severity.parse(entry.get("severity")) or Severity.MODERATE,
         # "unknown" (pip-audit, uv audit) must not come back as the
         # placeholder severity it is stored with.
         severity_known=entry.get("severity_known", True) is not False
-        and str(entry.get("severity", "")).lower() != "unknown",
+        and Severity.parse(entry.get("severity")) is not None,
         aliases=[a for a in entry.get("aliases") or [] if isinstance(a, str)],
         title=entry.get("title", ""),
         fix_version=entry.get("fix_version", ""),
