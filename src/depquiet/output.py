@@ -30,6 +30,23 @@ _RESET = "\033[0m"
 _CYAN = "\033[96m"
 
 
+# What produced the alerts, in words: "pip" alone read as if the project used
+# pip, when it is pip-audit reading a uv or Poetry lockfile.
+_SOURCE_LABELS = {
+    "pip": "Python, via pip-audit",
+    "uv": "Python, via uv audit",
+    "npm": "npm audit",
+    "pnpm": "pnpm audit",
+    "osv": "lockfiles, via OSV.dev",
+    "sbom": "SBOM",
+}
+
+
+def _source_label(package_manager: str) -> str:
+    """``pip+npm`` → ``Python, via pip-audit + npm audit``; unknown names stay as they are."""
+    return " + ".join(_SOURCE_LABELS.get(p, p) for p in package_manager.split("+"))
+
+
 def _count(n: int, noun: str) -> str:
     """``1 alert``, ``3 alerts``: the noun agrees with the count."""
     return f"{n} {noun}" if n == 1 else f"{n} {noun}s"
@@ -61,7 +78,7 @@ def print_scan_result(result: ScanResult) -> None:
     # Header
     print()
     print(
-        f"{_c(_BOLD, 'depquiet')} scan — {result.package_manager} "
+        f"{_c(_BOLD, 'depquiet')} scan — {_source_label(result.package_manager)} "
         f"({_count(result.total_dependencies, 'vulnerable package')})"
     )
     print()

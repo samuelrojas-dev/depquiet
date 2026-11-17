@@ -1,4 +1,4 @@
-id: webpack-dev-middleware-dev-only
+id: webpack-dev-middleware-path-traversal
 reason: "No import of webpack-dev-middleware, or of a direct dependency that brings it in, was found in the project source. That is all depquiet checked: it does not verify how webpack-dev-middleware is used. Read the advisory before relying on this."
 author: "@depquiet"
 cves:

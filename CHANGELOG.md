@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.47.6] - 2026-11-17
+
+### Fixed
+- **Five built-in template names described the wrong vulnerability.** They show in
+  `depquiet explain` and in `--json` (`template_id`). Checked against each advisory:
+  `axios-ssrf-server-only` is now `axios-xsrf-token-leak` (CVE-2023-45857 leaks the XSRF
+  token; it is not SSRF), `node-forge-timing-attack` is `node-forge-signature-verification`,
+  `postcss-redos` is `postcss-redos-and-parsing` (CVE-2023-44270 is a parsing error, not
+  ReDoS), `express-open-redirect-static` is `express-open-redirect`, and
+  `webpack-dev-middleware-dev-only` is `webpack-dev-middleware-path-traversal` (the template
+  never checks that the package is development-only). The other 15 match their advisories.
+- The lodash template also requires `zipObjectDeep` to be absent: CVE-2020-8203 is in that
+  function, which the template did not check. It is now `lodash-prototype-pollution`.
+- The report header says what produced the alerts ("Python, via pip-audit" instead of "pip",
+  which read as if the project used pip); one blank line before the KEV note; "nothing
+  scanned" names the full path instead of ending in "..".
+
 ## [0.47.5] - 2026-11-17
 
 ### Fixed
@@ -1270,7 +1287,8 @@ requirements.txt and npm projects:
 - CI workflow with lint, typecheck, test matrix (3.11/3.12/3.13), and build
 - Automated release workflow with trusted PyPI publishing
 
-[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.5...HEAD
+[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.6...HEAD
+[0.47.6]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.5...v0.47.6
 [0.47.5]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.4...v0.47.5
 [0.47.4]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.3...v0.47.4
 [0.47.3]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.2...v0.47.3

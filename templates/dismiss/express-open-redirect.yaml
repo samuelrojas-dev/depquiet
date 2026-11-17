@@ -1,4 +1,4 @@
-id: express-open-redirect-static
+id: express-open-redirect
 reason: "No import of express, or of a direct dependency that brings it in, was found in the project source. That is all depquiet checked: it does not verify how express is used. Read the advisory before relying on this."
 author: "@depquiet"
 cves:

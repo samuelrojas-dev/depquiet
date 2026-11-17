@@ -926,8 +926,9 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
         _print_json(result, license_report=license_report, fix_plan=fix_plan)
     else:
         print_scan_result(result)
+        # The report ends with a blank line: one note per line after it.
         for notice in notices:
-            print(f"\n{notice}")
+            print(notice)
     if warnings:
         print("", file=sys.stderr)
         for warning in warnings:
