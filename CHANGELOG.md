@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.47.4] - 2026-11-17
+
+### Security
+- **A crafted report could put a `javascript:` link in the HTML report.** A SARIF rule's
+  `helpUri` (or any advisory URL from a report piped to `--stdin`) was written into the
+  HTML report as a link: `javascript:alert(document.domain)` ran on click. A URL is now kept
+  only when it is an `http(s)` address, so HTML, Markdown, SARIF and annotations never get
+  another scheme. Markdown links escape parentheses so a URL cannot close the link early.
+
+### Fixed
+- **`--fix --dry-run` said "✅ Fixed 8 vulnerabilities" and exited 0.** On the demo project 5
+  of those 8 upgrades cannot install (botocore 1.29.0 holds urllib3 below 1.27), and 10
+  ACTION alerts were still open. A dry run now lists the upgrades it would try, says they
+  were neither run nor checked against the resolver (`--check-fixes` checks them), and
+  exits as the scan does.
+- **`--license` read a License field that names no license as UNKNOWN.** python-dateutil
+  publishes "Dual License" with Apache and BSD classifiers, and failed the license check.
+  The OSI classifiers are used when the field names no license. When a package has several,
+  they are combined with AND, so the most restrictive sets the risk: the first one used to
+  win, and MIT listed before GPL-3.0 read as MIT.
+- The HTML report's first column is "Advisory" (it held PYSEC and GHSA ids under "CVE") and
+  shows the CVE when the scanner's id is another. "Fixed 1 vulnerabilities" reads "Fixed 1
+  alert".
+
 ## [0.47.3] - 2026-11-17
 
 ### Fixed
@@ -1231,7 +1255,8 @@ requirements.txt and npm projects:
 - CI workflow with lint, typecheck, test matrix (3.11/3.12/3.13), and build
 - Automated release workflow with trusted PyPI publishing
 
-[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.3...HEAD
+[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.4...HEAD
+[0.47.4]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.3...v0.47.4
 [0.47.3]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.2...v0.47.3
 [0.47.2]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.1...v0.47.2
 [0.47.1]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.0...v0.47.1
