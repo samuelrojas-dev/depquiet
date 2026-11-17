@@ -247,6 +247,7 @@ def explain_main(argv: list[str]) -> int:
     args = parser.parse_args(argv)
 
     tr = None
+    kev_checked: bool | None = False
 
     if args.from_json:
         # Load from a saved JSON scan
@@ -260,6 +261,8 @@ def explain_main(argv: list[str]) -> int:
             return 1
         try:
             tr = find_cve_in_json(data, args.cve)
+            saved = data.get("kev_checked") if isinstance(data, dict) else None
+            kev_checked = saved if isinstance(saved, bool) else None
         except (ValueError, TypeError) as exc:
             print(f"Error: invalid saved scan evidence: {exc}", file=sys.stderr)
             return 2
@@ -277,6 +280,20 @@ def explain_main(argv: list[str]) -> int:
         if not result.scanned:
             print(f"depquiet: nothing scanned: {result.note}", file=sys.stderr)
             return 2
+        # KEV as the project's config asks for it, so explain agrees with the scan.
+        if merged.kev or merged.kev_file:
+            try:
+                catalog = (
+                    load_kev_from_file(merged.kev_file)
+                    if merged.kev_file
+                    else fetch_kev_catalog(offline=merged.offline)
+                )
+            except (OSError, ValueError) as exc:
+                print(f"Error: cannot read KEV file {merged.kev_file}: {exc}", file=sys.stderr)
+                return 2
+            if catalog is not None:
+                apply_kev(result, catalog)
+                kev_checked = True
         tr = find_cve(result, args.cve)
 
     if tr is None:
@@ -287,7 +304,7 @@ def explain_main(argv: list[str]) -> int:
         )
         return 1
 
-    exp = explain_triage(tr)
+    exp = explain_triage(tr, kev_checked)
 
     if args.json_output:
         print(format_explanation_json(exp))
@@ -818,6 +835,7 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
             kev_catalog = fetch_kev_catalog(offline=merged.offline)
         if kev_catalog is not None:
             kev_result = apply_kev(result, kev_catalog)
+            result.kev_checked = True
             parts = [f"🛡️  KEV: {kev_result.kev_matches} of {kev_result.total_checked}"]
             parts[0] += " CVEs on the CISA KEV catalog"
             if kev_result.escalated > 0:
@@ -1067,6 +1085,8 @@ def _print_json(
         "total_dependencies": result.total_dependencies,
         "scanned": result.scanned,
         "note": result.note,
+        # Whether KEV was checked: without it, no "kev" entry means unknown.
+        "kev_checked": result.kev_checked,
         "summary": {
             "total": len(result.results),
             "action": len(result.action),

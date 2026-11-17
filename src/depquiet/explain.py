@@ -102,8 +102,13 @@ class Explanation:
 # ---------------------------------------------------------------------------
 
 
-def explain_triage(tr: TriageResult) -> Explanation:
-    """Build an Explanation from a TriageResult."""
+def explain_triage(tr: TriageResult, kev_checked: bool | None = True) -> Explanation:
+    """Build an Explanation from a TriageResult.
+
+    ``kev_checked`` says whether the scan was matched against the CISA KEV
+    catalog (``None``: a saved scan that does not say). Only then does a missing
+    KEV entry mean "not listed".
+    """
     signals: list[Signal] = []
 
     # 1. EPSS score
@@ -309,12 +314,27 @@ def explain_triage(tr: TriageResult) -> Explanation:
                 detail=f"Added {tr.kev_entry.date_added}, due {tr.kev_entry.due_date}",
             )
         )
-    else:
+    elif kev_checked and tr.vuln.cve_id:
         signals.append(
             Signal(
                 name="CISA KEV",
                 value="not listed",
                 effect="neutral",
+            )
+        )
+    else:
+        if kev_checked:
+            why = f"KEV lists CVE ids, and {tr.vuln.cve} has no CVE id or alias"
+        elif kev_checked is None:
+            why = "This saved scan does not record whether KEV was checked"
+        else:
+            why = "The scan ran without --kev"
+        signals.append(
+            Signal(
+                name="CISA KEV",
+                value="not checked",
+                effect="neutral",
+                detail=why,
             )
         )
 
@@ -357,12 +377,28 @@ def explain_triage(tr: TriageResult) -> Explanation:
 
 
 def find_cve(result: ScanResult, cve_id: str) -> TriageResult | None:
-    """Find a TriageResult by CVE ID (case-insensitive)."""
+    """Find a TriageResult by its id or one of its aliases (case-insensitive).
+
+    pip-audit names an advisory PYSEC-..., npm audit GHSA-...; people look it
+    up by its CVE id, which the scanner gives as an alias.
+    """
     target = cve_id.upper()
     for tr in result.results:
         if tr.vuln.cve.upper() == target:
             return tr
+    for tr in result.results:
+        if any(a.upper() == target for a in tr.vuln.aliases):
+            return tr
     return None
+
+
+def _matches(entry: dict[str, Any], target: str, *, by_alias: bool) -> bool:
+    if not by_alias:
+        return str(entry.get("cve", "")).upper() == target
+    aliases = entry.get("aliases") or []
+    return isinstance(aliases, list) and any(
+        isinstance(a, str) and a.upper() == target for a in aliases
+    )
 
 
 def find_cve_in_json(data: dict[str, Any], cve_id: str) -> TriageResult | None:
@@ -373,112 +409,118 @@ def find_cve_in_json(data: dict[str, Any], cve_id: str) -> TriageResult | None:
     from depquiet.models import Severity, Vulnerability
 
     target = cve_id.upper()
-    for entry in data.get("results", []):
-        if entry.get("cve", "").upper() == target:
-            raw_components = entry.get("components", [])
-            raw_notes = entry.get("component_notes", [])
-            version_kind = entry.get("version_kind", "reported")
-            advisory_range = entry.get("advisory_range", "")
-            resolution_complete = entry.get("component_resolution_complete", False)
-            if (
-                not isinstance(raw_components, list)
-                or not isinstance(raw_notes, list)
-                or not all(isinstance(note, str) for note in raw_notes)
-            ):
-                raise ValueError("Invalid saved component evidence")
-            if (
-                not isinstance(version_kind, str)
-                or version_kind not in {"reported", "advisory_range"}
-                or not isinstance(advisory_range, str)
-                or not isinstance(resolution_complete, bool)
-            ):
-                raise ValueError("Invalid saved component version metadata")
-            vuln = Vulnerability(
-                cve=entry["cve"],
-                package=entry.get("package", ""),
-                version=entry.get("version", ""),
-                severity=Severity.from_str(entry.get("severity", "moderate")),
-                title=entry.get("title", ""),
-                fix_version=entry.get("fix_version", ""),
-                fix_package=entry.get("fix_package", ""),
-                url=entry.get("url", ""),
-                version_kind=version_kind,
-                advisory_range=advisory_range,
-                components=[ComponentEvidence.from_dict(raw) for raw in raw_components],
-                component_notes=list(raw_notes),
-                component_resolution_complete=resolution_complete,
-                is_dev=entry.get("is_dev", "dev_dependency" in entry.get("reasons", [])),
-                is_direct=entry.get("is_direct") is not False,
-            )
-            reasons = [
-                FilterReason(r)
-                for r in entry.get("reasons", [])
-                if r in FilterReason._value2member_map_
-            ]
-            raw_evidence = entry.get("evidence") or {}
-            if not isinstance(raw_evidence, dict):
-                raise ValueError("Invalid saved dependency evidence")
-            raw_workspaces = raw_evidence.get("workspace_contexts", [])
-            if not isinstance(raw_workspaces, list):
-                raise ValueError("Invalid saved workspace evidence")
-            for name in ("graph_coverage_complete", "analysis_coverage_complete"):
-                if raw_evidence.get(name) is not None and type(raw_evidence[name]) is not bool:
-                    raise ValueError(f"Invalid saved dependency evidence: {name}")
-            evidence = DependencyEvidence(
-                analysis=raw_evidence.get("analysis", "dependency_imports"),
-                usage=raw_evidence.get("usage", "unknown"),
-                import_sites=raw_evidence.get("import_sites", []),
-                observations=raw_evidence.get("observations", []),
-                graph_coverage_complete=raw_evidence.get("graph_coverage_complete"),
-                analysis_coverage_complete=raw_evidence.get("analysis_coverage_complete"),
-                workspace_contexts=[WorkspaceEvidence.from_dict(raw) for raw in raw_workspaces],
-            )
-            trace = [
-                DecisionChange(
-                    source=change["source"],
-                    previous_verdict=(
-                        Verdict(change["previous_verdict"])
-                        if change.get("previous_verdict")
-                        else None
-                    ),
-                    verdict=Verdict(change["verdict"]),
-                    rule_id=change.get("rule_id", ""),
-                    reason=change.get("reason", ""),
-                    path=change.get("path", ""),
-                    author=change.get("author", ""),
-                    expires=change.get("expires", ""),
-                )
-                for change in entry.get("decision_trace", [])
-            ]
-            raw_kev = entry.get("kev")
-            kev_entry = None
-            if raw_kev:
-                kev_entry = KevEntry(
-                    cve_id=vuln.cve,
-                    vendor=raw_kev.get("vendor", ""),
-                    product=raw_kev.get("product", ""),
-                    name=raw_kev.get("name", ""),
-                    description=raw_kev.get("description", ""),
-                    date_added=raw_kev.get("date_added", ""),
-                    due_date=raw_kev.get("due_date", ""),
-                    required_action=raw_kev.get("required_action", ""),
-                    ransomware_use=raw_kev.get("ransomware_use", False),
-                )
-            return TriageResult(
-                vuln=vuln,
-                verdict=Verdict(entry.get("verdict", "review")),
-                reasons=reasons,
-                epss_score=entry.get("epss_score"),
-                epss_percentile=entry.get("epss_percentile"),
-                reachable_imports=entry.get("reachable_imports", []),
-                dependency_type=entry.get("dependency_type", ""),
-                introduced_by=entry.get("introduced_by", []),
-                template_id=entry.get("template_id"),
-                template_reason=entry.get("template_reason"),
-                evidence=evidence,
-                decision_trace=trace,
-                kev_entry=kev_entry,
-            )
+    rows = [e for e in data.get("results", []) if isinstance(e, dict)]
+    found = next((e for e in rows if _matches(e, target, by_alias=False)), None)
+    if found is None:
+        found = next((e for e in rows if _matches(e, target, by_alias=True)), None)
+    if found is None:
+        return None
+    entry = found
+    raw_components = entry.get("components", [])
+    raw_notes = entry.get("component_notes", [])
+    version_kind = entry.get("version_kind", "reported")
+    advisory_range = entry.get("advisory_range", "")
+    resolution_complete = entry.get("component_resolution_complete", False)
+    if (
+        not isinstance(raw_components, list)
+        or not isinstance(raw_notes, list)
+        or not all(isinstance(note, str) for note in raw_notes)
+    ):
+        raise ValueError("Invalid saved component evidence")
+    if (
+        not isinstance(version_kind, str)
+        or version_kind not in {"reported", "advisory_range"}
+        or not isinstance(advisory_range, str)
+        or not isinstance(resolution_complete, bool)
+    ):
+        raise ValueError("Invalid saved component version metadata")
+    vuln = Vulnerability(
+        cve=entry["cve"],
+        package=entry.get("package", ""),
+        version=entry.get("version", ""),
+        severity=Severity.from_str(entry.get("severity", "moderate")),
+        # "unknown" (pip-audit, uv audit) must not come back as the
+        # placeholder severity it is stored with.
+        severity_known=entry.get("severity_known", True) is not False
+        and str(entry.get("severity", "")).lower() != "unknown",
+        aliases=[a for a in entry.get("aliases") or [] if isinstance(a, str)],
+        title=entry.get("title", ""),
+        fix_version=entry.get("fix_version", ""),
+        fix_package=entry.get("fix_package", ""),
+        url=entry.get("url", ""),
+        version_kind=version_kind,
+        advisory_range=advisory_range,
+        components=[ComponentEvidence.from_dict(raw) for raw in raw_components],
+        component_notes=list(raw_notes),
+        component_resolution_complete=resolution_complete,
+        is_dev=entry.get("is_dev", "dev_dependency" in entry.get("reasons", [])),
+        is_direct=entry.get("is_direct") is not False,
+    )
+    reasons = [
+        FilterReason(r) for r in entry.get("reasons", []) if r in FilterReason._value2member_map_
+    ]
+    raw_evidence = entry.get("evidence") or {}
+    if not isinstance(raw_evidence, dict):
+        raise ValueError("Invalid saved dependency evidence")
+    raw_workspaces = raw_evidence.get("workspace_contexts", [])
+    if not isinstance(raw_workspaces, list):
+        raise ValueError("Invalid saved workspace evidence")
+    for name in ("graph_coverage_complete", "analysis_coverage_complete"):
+        if raw_evidence.get(name) is not None and type(raw_evidence[name]) is not bool:
+            raise ValueError(f"Invalid saved dependency evidence: {name}")
+    evidence = DependencyEvidence(
+        analysis=raw_evidence.get("analysis", "dependency_imports"),
+        usage=raw_evidence.get("usage", "unknown"),
+        import_sites=raw_evidence.get("import_sites", []),
+        observations=raw_evidence.get("observations", []),
+        graph_coverage_complete=raw_evidence.get("graph_coverage_complete"),
+        analysis_coverage_complete=raw_evidence.get("analysis_coverage_complete"),
+        workspace_contexts=[WorkspaceEvidence.from_dict(raw) for raw in raw_workspaces],
+    )
+    trace = [
+        DecisionChange(
+            source=change["source"],
+            previous_verdict=(
+                Verdict(change["previous_verdict"]) if change.get("previous_verdict") else None
+            ),
+            verdict=Verdict(change["verdict"]),
+            rule_id=change.get("rule_id", ""),
+            reason=change.get("reason", ""),
+            path=change.get("path", ""),
+            author=change.get("author", ""),
+            expires=change.get("expires", ""),
+        )
+        for change in entry.get("decision_trace", [])
+    ]
+    raw_kev = entry.get("kev")
+    kev_entry = None
+    if raw_kev:
+        kev_entry = KevEntry(
+            cve_id=vuln.cve,
+            vendor=raw_kev.get("vendor", ""),
+            product=raw_kev.get("product", ""),
+            name=raw_kev.get("name", ""),
+            description=raw_kev.get("description", ""),
+            date_added=raw_kev.get("date_added", ""),
+            due_date=raw_kev.get("due_date", ""),
+            required_action=raw_kev.get("required_action", ""),
+            ransomware_use=raw_kev.get("ransomware_use", False),
+        )
+    return TriageResult(
+        vuln=vuln,
+        verdict=Verdict(entry.get("verdict", "review")),
+        reasons=reasons,
+        epss_score=entry.get("epss_score"),
+        epss_percentile=entry.get("epss_percentile"),
+        reachable_imports=entry.get("reachable_imports", []),
+        dependency_type=entry.get("dependency_type", ""),
+        introduced_by=entry.get("introduced_by", []),
+        template_id=entry.get("template_id"),
+        template_reason=entry.get("template_reason"),
+        evidence=evidence,
+        decision_trace=trace,
+        kev_entry=kev_entry,
+    )
     return None
 
 

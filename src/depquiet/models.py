@@ -351,6 +351,9 @@ class ScanResult:
     # CVEs whose EPSS score could not be fetched (network failure or an
     # unreadable answer): the report is not ordered by their score.
     epss_lookups_failed: int = 0
+    # True once the scan was matched against the CISA KEV catalog. Without it,
+    # "not on KEV" is unknown, not a finding.
+    kev_checked: bool = False
 
     @property
     def action(self) -> list[TriageResult]:
