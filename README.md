@@ -1019,6 +1019,10 @@ depquiet explain GHSA-9wv6-86v2-598j --from-json scan.json --json
 depquiet explain GHSA-9wv6-86v2-598j --path ./my-project
 ```
 
+Look an alert up by its own id or by any alias: `depquiet explain CVE-2024-35195` finds
+the alert pip-audit reports as `PYSEC-2026-1873`. KEV reads "not listed" only when the
+scan checked KEV (`--kev`, `--kev-file` or the config); otherwise it reads "not checked".
+
 Each signal shows its effect on the final verdict:
 
 ```
@@ -1032,7 +1036,7 @@ Each signal shows its effect on the final verdict:
   - EPSS score: unavailable — EPSS lookup was skipped or failed
   ↑ Reachability: reachable — Transitive, pulled in by express. Entry points: app.js
   · Dependency type: production — Included in production builds
-  · CISA KEV: not listed
+  · CISA KEV: not checked — The scan ran without --kev
 ```
 
 (The [real Express benchmark](https://github.com/samuelrojas-dev/depquiet/blob/main/benchmarks/RESULTS.md), scanned with `--offline`, so no EPSS.)

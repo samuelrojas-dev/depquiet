@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.47.1] - 2026-11-17
+
+### Fixed
+- **`depquiet explain` says only what the scan established.** Found in an end-to-end check
+  of 0.47.0 installed from PyPI:
+  - An alert can be looked up by its CVE alias: `explain CVE-2024-35195` reported "CVE not
+    found" for the alert pip-audit names `PYSEC-2026-1873`, although the help asks for a
+    CVE id.
+  - From a saved scan, an alert with no severity (pip-audit, uv audit) showed
+    "Severity: MODERATE", the placeholder it is stored with. It shows "UNKNOWN".
+  - From a saved scan, the alert's aliases were dropped, so explain said it had "no CVE id
+    or alias" and found no EPSS score although the scan had both.
+  - "CISA KEV: not listed" appeared for scans that never checked KEV. It now reads "not
+    checked" and says why. `--json` records `kev_checked`; a live `explain` checks KEV
+    when the project's config asks for it.
+
 ### Documentation
 - The README's headline table is remeasured with 0.47.0 (2026-11-15, same commits, in a
   disposable VM). Given the same pip-audit report, 0.39.0 and 0.47.0 agree on every verdict
@@ -1172,7 +1188,8 @@ requirements.txt and npm projects:
 - CI workflow with lint, typecheck, test matrix (3.11/3.12/3.13), and build
 - Automated release workflow with trusted PyPI publishing
 
-[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.0...HEAD
+[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.1...HEAD
+[0.47.1]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.0...v0.47.1
 [0.47.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.46.0...v0.47.0
 [0.46.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.45.2...v0.46.0
 [0.45.2]: https://github.com/samuelrojas-dev/depquiet/compare/v0.45.1...v0.45.2
