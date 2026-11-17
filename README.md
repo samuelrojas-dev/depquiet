@@ -139,7 +139,7 @@ depquiet would rather let a false positive through than dismiss a real vulnerabi
 
 ### Supported inputs
 
-depquiet accepts output from any vulnerability scanner — natively or via SARIF:
+depquiet reads the dependency alerts of these scanners, natively or through SARIF:
 
 | Scanner | Format | Input method |
 |---|---|---|
@@ -151,12 +151,17 @@ depquiet accepts output from any vulnerability scanner — natively or via SARIF
 | Trivy | JSON or SARIF | `trivy fs --format json . \| depquiet --stdin` |
 | Grype | JSON | `grype dir:. -o json \| depquiet --stdin` |
 | Snyk | JSON | `snyk test --json \| depquiet --stdin` |
-| Dependabot | API JSON | `gh api /repos/O/R/dependabot/alerts \| depquiet --stdin` |
-| **Any SARIF scanner** | **SARIF v2.1.0** | `<scanner> --sarif \| depquiet --stdin` |
+| Dependabot | API JSON | `gh api /repos/O/R/dependabot/alerts --paginate \| depquiet --stdin` |
+| **Any SARIF dependency scanner** | **SARIF v2.1.0** | `<scanner> --sarif \| depquiet --stdin` |
 | **CycloneDX SBOM** | **JSON** | `depquiet --from-sbom vendor.cdx.json` |
 | **SPDX SBOM** | **JSON** | `depquiet --from-sbom vendor.spdx.json` |
 
-The SARIF parser handles output from CodeQL, Semgrep, Trivy SARIF, Grype SARIF, Snyk SARIF, Checkmarx, Fortify, and any other tool that emits SARIF v2.1.0. CVE, package name, severity (CVSS or level-based), and fix version are extracted automatically from the standard SARIF fields and common scanner-specific properties.
+The SARIF parser reads dependency findings from Trivy, Grype, Snyk and other tools that emit
+SARIF v2.1.0: CVE, package name, severity (CVSS or level-based) and fix version come from the
+standard SARIF fields and common scanner-specific properties. A result that names no package
+is a code finding (CodeQL, Semgrep and other static analysis): depquiet does not triage it and
+says how many it left out, and a SARIF file with only code findings is reported as not scanned,
+never as clean.
 
 ### npm component evidence
 
@@ -447,11 +452,9 @@ grype dir:. -o json | depquiet --stdin
 snyk test --json | depquiet --stdin
 gh api /repos/OWNER/REPO/dependabot/alerts --paginate | depquiet --stdin
 
-# SARIF input — any scanner that emits SARIF works
-semgrep --sarif . | depquiet --stdin
-codeql database analyze db --format=sarif-latest | depquiet --stdin
+# SARIF input from a dependency scanner
 trivy fs --format sarif . | depquiet --stdin
-checkmarx-cli scan --output-format sarif | depquiet --stdin
+grype dir:. -o sarif | depquiet --stdin
 
 # Fully offline (skip EPSS API)
 depquiet --offline

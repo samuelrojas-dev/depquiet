@@ -42,7 +42,7 @@ from depquiet.parsers.npm import NpmAuditParser
 from depquiet.parsers.osv import OsvScanner, parse_osv_response, query_osv_batch
 from depquiet.parsers.pip import PipAuditParser
 from depquiet.parsers.pnpm import PnpmAuditParser
-from depquiet.parsers.sarif import SarifParser
+from depquiet.parsers.sarif import SarifParser, code_findings
 from depquiet.parsers.sbom import SbomParser, is_cyclonedx, is_spdx
 from depquiet.parsers.snyk import SnykParser
 from depquiet.parsers.trivy import TrivyParser
@@ -293,6 +293,17 @@ def scan(
             "$schema" in audit_json or audit_json.get("version") == "2.1.0"
         ):
             vulns = SarifParser.parse(audit_json, project)
+            skipped = code_findings(audit_json)
+            if skipped:
+                what = "1 SARIF result names" if skipped == 1 else f"{skipped} SARIF results name"
+                scan_note = (
+                    f"{what} no package: code findings (CodeQL, Semgrep and similar tools), "
+                    "which depquiet does not triage. Review them in the tool that reported them."
+                )
+                if not vulns:
+                    return ScanResult(
+                        str(project), pm or "sarif", 0, [], scanned=False, note=scan_note
+                    )
         elif "Results" in audit_json:
             vulns = TrivyParser.parse(audit_json, project)
         elif "matches" in audit_json:
