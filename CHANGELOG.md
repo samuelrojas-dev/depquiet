@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.47.5] - 2026-11-17
+
+### Fixed
+- **A dependency group uv installs in production could be filtered as development-only.**
+  Groups were classified by name alone. But `uv sync --frozen --no-dev`, the usual
+  production install, leaves out only the group named `dev`: every other group in
+  `tool.uv.default-groups` is installed. With `default-groups = "all"`, a `docs` group's
+  packages shipped and depquiet filtered their alerts. A group in `default-groups` is now
+  production, whatever its name, except `dev`.
+
+### Documentation
+- The README states the rule above, and that for Poetry depquiet assumes production installs
+  with `poetry install --only main` (`--without dev` would still install a non-optional
+  `docs` or `test` group).
+
 ## [0.47.4] - 2026-11-17
 
 ### Security
@@ -1255,7 +1270,8 @@ requirements.txt and npm projects:
 - CI workflow with lint, typecheck, test matrix (3.11/3.12/3.13), and build
 - Automated release workflow with trusted PyPI publishing
 
-[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.4...HEAD
+[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.5...HEAD
+[0.47.5]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.4...v0.47.5
 [0.47.4]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.3...v0.47.4
 [0.47.3]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.2...v0.47.3
 [0.47.2]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.1...v0.47.2

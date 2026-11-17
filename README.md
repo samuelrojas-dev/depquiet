@@ -1540,6 +1540,11 @@ its servers run in a group called `prod`, and PostHog keeps optional features in
 such as `sentiment`. depquiet treats a group as development-only when its name says so
 (`dev`, `test`, `docs`, `lint`...) and as production otherwise; up to 0.33.1 it treated
 every group as development-only and filtered all 43 zulip alerts, 17 of them wrongly.
+A group listed in uv's `tool.uv.default-groups` (or every group, with `"all"`) is
+production whatever its name, except `dev`: `uv sync --no-dev`, the usual production
+install, still installs the other default groups. For Poetry, depquiet assumes production installs
+with `poetry install --only main`: `--without dev` would still install a non-optional `docs`
+or `test` group, which depquiet then filters.
 
 Nothing else was filtered: every one of these projects has a dynamic import somewhere,
 which keeps the unused-dependency filter off.
