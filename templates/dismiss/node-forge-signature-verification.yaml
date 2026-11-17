@@ -1,4 +1,4 @@
-id: node-forge-timing-attack
+id: node-forge-signature-verification
 reason: "No import of node-forge, or of a direct dependency that brings it in, was found in the project source. That is all depquiet checked: it does not verify how node-forge is used. Read the advisory before relying on this."
 author: "@depquiet"
 cves:

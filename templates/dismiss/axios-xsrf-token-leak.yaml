@@ -1,4 +1,4 @@
-id: axios-ssrf-server-only
+id: axios-xsrf-token-leak
 reason: "No import of axios, or of a direct dependency that brings it in, was found in the project source. That is all depquiet checked: it does not verify how axios is used. Read the advisory before relying on this."
 author: "@depquiet"
 cves:

@@ -1,0 +1,9 @@
+id: lodash-prototype-pollution
+reason: "Neither lodash nor a direct dependency that brings it in is imported, and defaultsDeep, merge, mergeWith and zipObjectDeep do not appear in the project source. That is all depquiet checked. Read the advisory before relying on this."
+author: "@depquiet"
+cves:
+  - CVE-2020-8203
+  - CVE-2019-10744
+  - CVE-2018-16487
+package: lodash
+not-imported: ["defaultsDeep", "merge", "mergeWith", "zipObjectDeep"]

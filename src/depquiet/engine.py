@@ -253,8 +253,8 @@ def scan(
                 )
             else:
                 note = (
-                    f"no supported manifest or lockfile in {project}. Run depquiet in a "
-                    "project directory, pass --path, or pipe in scanner output with --stdin."
+                    f"no supported manifest or lockfile in {project.resolve()}: run depquiet in "
+                    "a project directory, pass --path, or pipe in scanner output with --stdin."
                 )
             return ScanResult(
                 project_path=str(project),
