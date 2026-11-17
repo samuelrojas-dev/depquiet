@@ -149,6 +149,9 @@ class ComponentEvidence:
 _CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
 
 
+_WEB_URL = re.compile(r"https?://[^\s<>\"'`]+", re.IGNORECASE)
+
+
 def strip_control(text: str) -> str:
     """``text`` without the control characters a terminal would interpret."""
     return _CONTROL.sub("", text)
@@ -217,6 +220,10 @@ class Vulnerability:
             if isinstance(value, str):
                 setattr(self, name, strip_control(value))
         self.aliases = [strip_control(a) if isinstance(a, str) else a for a in self.aliases]
+        # Reports become links in HTML, Markdown and SARIF: only a web address
+        # is kept, never javascript: or data: from a crafted report.
+        if not isinstance(self.url, str) or not _WEB_URL.fullmatch(self.url):
+            self.url = ""
 
     @property
     def severity_label(self) -> str:

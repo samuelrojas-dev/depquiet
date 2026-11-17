@@ -264,6 +264,8 @@ def _finding_row(tr: TriageResult) -> str:
     cve_cell = _esc(tr.vuln.cve)
     if tr.vuln.url:
         cve_cell = f'<a href="{_esc(tr.vuln.url)}" target="_blank" rel="noopener">{cve_cell}</a>'
+    if tr.vuln.cve_id and tr.vuln.cve_id != tr.vuln.cve:
+        cve_cell += f'<br><small class="alias">{_esc(tr.vuln.cve_id)}</small>'
 
     reasons = ", ".join(r.value.replace("_", " ") for r in tr.reasons) if tr.reasons else "—"
 
@@ -291,7 +293,7 @@ def _build_action_section(result: ScanResult) -> str:
     <table>
       <thead>
         <tr>
-          <th>CVE</th><th>Package</th><th>Severity</th>
+          <th>Advisory</th><th>Package</th><th>Severity</th>
           <th>EPSS</th><th>Fix</th><th>Reason</th>
         </tr>
       </thead>
@@ -313,7 +315,7 @@ def _build_review_section(result: ScanResult) -> str:
     <table>
       <thead>
         <tr>
-          <th>CVE</th><th>Package</th><th>Severity</th>
+          <th>Advisory</th><th>Package</th><th>Severity</th>
           <th>EPSS</th><th>Fix</th><th>Reason</th>
         </tr>
       </thead>
@@ -347,7 +349,7 @@ def _build_filtered_section(result: ScanResult, reason_rows: str) -> str:
       <table>
         <thead>
           <tr>
-            <th>CVE</th><th>Package</th><th>Severity</th>
+            <th>Advisory</th><th>Package</th><th>Severity</th>
             <th>EPSS</th><th>Fix</th><th>Reason</th>
           </tr>
         </thead>
