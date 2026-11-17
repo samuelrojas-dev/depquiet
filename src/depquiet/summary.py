@@ -64,7 +64,7 @@ def render_summary(result: ScanResult) -> str:
             sev = _severity_badge(r.vuln.severity_label)
             cve = r.vuln.cve
             if r.vuln.url:
-                cve = f"[{r.vuln.cve}]({r.vuln.url})"
+                cve = f"[{r.vuln.cve}]({_md_url(r.vuln.url)})"
             lines.append(f"| {cve} | `{r.vuln.package}` | {sev} | {epss} | {fix} |")
         lines.append("")
 
@@ -85,7 +85,7 @@ def render_summary(result: ScanResult) -> str:
             sev = _severity_badge(r.vuln.severity_label)
             cve = r.vuln.cve
             if r.vuln.url:
-                cve = f"[{r.vuln.cve}]({r.vuln.url})"
+                cve = f"[{r.vuln.cve}]({_md_url(r.vuln.url)})"
             lines.append(f"| {cve} | `{r.vuln.package}` | {sev} | {epss} |")
         if len(result.review) > 5:
             lines.append("")
@@ -162,6 +162,11 @@ def _fix_checks(result: ScanResult) -> list[str]:
         lines.append(f"| {upgrade} | {answer} | {step} |")
     lines.append("")
     return lines
+
+
+def _md_url(url: str) -> str:
+    """A URL safe inside a Markdown link: parentheses would end it early."""
+    return url.replace("(", "%28").replace(")", "%29")
 
 
 def _cell(text: str) -> str:

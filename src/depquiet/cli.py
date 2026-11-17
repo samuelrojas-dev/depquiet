@@ -1020,6 +1020,9 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
     if args.fix or args.dry_run:
         fix_report = apply_fixes(result, args.path, dry_run=args.dry_run)
         print_fix_report(fix_report, dry_run=args.dry_run)
+        if args.dry_run:
+            # A dry run changes nothing: the alerts found are all still there.
+            return 1 if _should_fail(result, merged.fail_on) else 0
         # After fixing, only fail if there are still unfixed ACTION items
         remaining = len(fix_report.failed) + len(fix_report.skipped) + len(fix_report.manual)
         if remaining > 0:

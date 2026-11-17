@@ -427,6 +427,9 @@ def _license_of(expression: str | None, text: str | None, classifiers: list[str]
     if expression and expression.strip():
         return expression.strip()
     # The License field sometimes holds the whole license text: not an id.
+    osi = [
+        _classifier_to_spdx(c) for c in classifiers if c.startswith("License :: OSI Approved :: ")
+    ]
     short = (text or "").strip()
     if (
         short
@@ -434,10 +437,14 @@ def _license_of(expression: str | None, text: str | None, classifiers: list[str]
         and "\n" not in short
         and len(short) <= 80
     ):
+        # A free-text field such as "Dual License" names no license; the
+        # classifiers do. Several are joined with AND, so the most
+        # restrictive one sets the risk (never an understated one).
+        if classify_license(short)[1] is LicenseRisk.UNKNOWN and osi:
+            return " AND ".join(dict.fromkeys(osi))
         return short
-    for c in classifiers:
-        if c.startswith("License :: OSI Approved :: "):
-            return _classifier_to_spdx(c)
+    if osi:
+        return " AND ".join(dict.fromkeys(osi))
     return "UNKNOWN"
 
 

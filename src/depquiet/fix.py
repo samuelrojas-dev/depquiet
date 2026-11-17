@@ -234,8 +234,20 @@ def print_fix_report(report: FixReport, *, dry_run: bool = False) -> None:
     """Print a human-readable fix report to stderr."""
     prefix = "[dry-run] " if dry_run else ""
 
-    if report.fixed:
-        print(f"\n{prefix}✅ Fixed {len(report.fixed)} vulnerabilities:", file=sys.stderr)
+    if report.fixed and dry_run:
+        # Nothing ran, and nothing was resolved: these are attempts, not fixes.
+        print(
+            f"\n{prefix}Would try {_n(len(report.fixed), 'upgrade')}. Not run and not checked "
+            "against the resolver: --check-fixes shows which of them can install.",
+            file=sys.stderr,
+        )
+        for r in report.fixed:
+            print(
+                f"   {r.cve}  {r.package} {r.from_version} → {r.to_version}: {r.message}",
+                file=sys.stderr,
+            )
+    elif report.fixed:
+        print(f"\n{prefix}✅ Fixed {_n(len(report.fixed), 'alert')}:", file=sys.stderr)
         for r in report.fixed:
             print(
                 f"   {r.cve}  {r.package} {r.from_version} → {r.to_version}",
@@ -264,6 +276,10 @@ def print_fix_report(report: FixReport, *, dry_run: bool = False) -> None:
         )
         for r in report.skipped:
             print(f"   {r.cve}  {r.package} {r.from_version}", file=sys.stderr)
+
+
+def _n(count: int, noun: str) -> str:
+    return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
 
 
 def _manual_lines(items: list[FixResult]) -> list[str]:
