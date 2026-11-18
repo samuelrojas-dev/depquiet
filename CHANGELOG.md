@@ -27,6 +27,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the lock also moved oaklib 0.7.4 → 0.7.5 and dropped six packages.
 
 ### Fixed
+- Found on the first real run of the Python floor plan (sparkgeo/prescient-sdk):
+  - a fix that uv says "only supports >3.9.0" (cryptography, which excludes 3.9.0 itself)
+    was not read as a Python floor and was left out, although the plan already raised the
+    floor past it;
+  - fixes left out for a reason that names `requires-python` (a fix that needs a newer
+    version of another package, say) are now tried again once the floor is raised;
+  - the pull request header said "requirements" when only `requires-python` changed, the
+    text said "1 more fix" for the only fix and "Python 3.9 and 3.10 is".
+- With `--fix-plan` and output saved to one file (`> out.txt 2>&1`), the plan printed above
+  the scan report.
 - In a lock forked by Python version (a package locked twice, such as pytest 8.4.2 for 3.9
   and 9.2.0 for 3.10+), the plan reported the newer copy as the installed version and missed
   uv's `Update x v1, v2 -> v2` lines in its list of lock changes. It now reads the lower copy

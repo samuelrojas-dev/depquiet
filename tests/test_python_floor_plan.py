@@ -219,7 +219,7 @@ def test_terminal_output(tmp_path, uv) -> None:
     out = io.StringIO()
     fp.print_fix_plan(build_fix_plan(_result(), _project(tmp_path), _checks()), out)
     text = out.getvalue()
-    assert "would let 1 more fix install (pytest; 1 alert)" in text
+    assert "would let 1 fix install (pytest; 1 alert)" in text
     assert "It drops Python 3.9" in text and "Add --raise-python-floor" in text
     assert "   \n" not in text  # no trailing blanks
 

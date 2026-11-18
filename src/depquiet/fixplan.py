@@ -945,6 +945,7 @@ def _plan_python_floor(
     result: ScanResult,
     timeout: int,
     include_filtered: bool = False,
+    retry: list[PlanItem] | None = None,
 ) -> tuple[PythonFloor, str]:
     """Check, on a copy, which fixes install once requires-python is raised.
 
@@ -953,28 +954,34 @@ def _plan_python_floor(
     The floor is the highest any waiting fix needs, so one edit covers them
     all. The fixes already in the plan stay in the check: the floor is
     proposed only if everything resolves together.
+
+    ``retry``: fixes left out for a reason that names requires-python (one
+    that only fits together with a newer package, say). Once the floor is
+    raised they often resolve, so they are tried again on the same copy.
     """
+    retry = retry or []
     floor = max(floors.values(), key=version_key)
     edits, dropped, problem = _floor_edits(project, floor)
     option = PythonFloor(floor, edits=edits, dropped=dropped, problem=problem)
     if problem:
         option.still_blocked = [i.package for i in waiting]
         return option, ""
+    trying = [*waiting, *retry]
     with tempfile.TemporaryDirectory(prefix="depquiet-fixplan-") as tmp:
         root = Path(tmp) / "project"
         shutil.copytree(project, root, ignore=_COPY_IGNORE, symlinks=True)
         _apply(root, [e for i in kept for e in i.edits] + edits)
         local: list[str] = []
-        reason = _resolves(root, executable, [*kept, *waiting], timeout, local)
+        reason = _resolves(root, executable, [*kept, *trying], timeout, local)
         if reason is None:
-            unblocked = list(waiting)
+            unblocked = list(trying)
         else:
             unblocked = []
-            for item in waiting:
+            for item in trying:
                 reason = _resolves(root, executable, [*kept, *unblocked, item], timeout, local)
                 if reason is None:
                     unblocked.append(item)
-                else:
+                elif item.package in floors:
                     item.why = (
                         f"needs Python >={floors[item.package]}, and with requires-python "
                         f"raised to >={floor} it still does not resolve: {reason}"
@@ -1075,19 +1082,36 @@ def build_fix_plan(
     option = None
     if waiting:
         kept = [i for i in candidates if i.included]
+        retry = [
+            i for i in items if not i.included and i not in waiting and "requires-python" in i.why
+        ]
+        for item in retry:
+            item.edits, item.also_upgrade = [], []
         option, floor_report = _plan_python_floor(
-            project, executable, kept, waiting, floors, result, timeout, include_filtered
+            project,
+            executable,
+            kept,
+            waiting,
+            floors,
+            result,
+            timeout,
+            include_filtered,
+            retry,
         )
-        unblocked = [i for i in waiting if i.package in option.unblocked]
+        unblocked = [i for i in [*waiting, *retry] if i.package in option.unblocked]
         for item in unblocked:
             if raise_python_floor:
                 item.included = True
                 item.python_floor = option.floor
             else:
+                need = (
+                    f"needs Python >={floors[item.package]}"
+                    if item.package in floors
+                    else ("does not fit with the project's current requires-python")
+                )
                 item.why = (
-                    f"needs Python >={floors[item.package]}: raising requires-python to "
-                    f">={option.floor} lets it install (verified; --raise-python-floor adds "
-                    "that change to the plan)."
+                    f"{need}: raising requires-python to >={option.floor} lets it install "
+                    "(verified; --raise-python-floor adds that change to the plan)."
                 )
         if raise_python_floor and unblocked:
             option.adopted = True
@@ -1309,7 +1333,12 @@ def fix_plan_markdown(plan: FixPlan, result: ScanResult, version: str = "") -> s
         else "`pyproject.toml`/`uv.toml` requirements and `uv.lock`"
     )
     if plan.python_floor is not None and plan.python_floor.adopted:
-        files = "`pyproject.toml` requirements and `requires-python`, and `uv.lock`"
+        requirements = any(e.kind != "python" for i in plan.included for e in i.edits)
+        files = (
+            "`pyproject.toml` requirements and `requires-python`, and `uv.lock`"
+            if requirements
+            else "`requires-python` in `pyproject.toml`, and `uv.lock`"
+        )
     confirmed = "this fix installs" if n == 1 else f"these {n} fixes install together"
     lines = [
         "## Security fixes verified by depquiet",
@@ -1340,7 +1369,8 @@ def fix_plan_markdown(plan: FixPlan, result: ScanResult, version: str = "") -> s
             + ("this fix needs" if len(floor.unblocked) == 1 else "these fixes need")
             + f": {', '.join(f'`{cell(n)}`' for n in floor.unblocked)}. Python "
             + (floor.dropped or f"below {floor.floor}")
-            + " is no longer supported: fine for an application, a breaking change for "
+            + (" are" if " and " in floor.dropped else " is")
+            + " no longer supported: fine for an application, a breaking change for "
             "users of a published library.",
         ]
     if plan.left_out:
@@ -1382,7 +1412,7 @@ def python_floor_lines(option: PythonFloor | None) -> list[str]:
     alerts = "alert" if option.alerts == 1 else "alerts"
     lines.append(
         f"  Raising requires-python to >={option.floor} "
-        f"{'lets' if option.adopted else 'would let'} {len(option.unblocked)} more {fixes} "
+        f"{'lets' if option.adopted else 'would let'} {len(option.unblocked)} {fixes} "
         f"install ({', '.join(option.unblocked)}; {option.alerts} {alerts}), verified with "
         "uv's resolver."
     )
