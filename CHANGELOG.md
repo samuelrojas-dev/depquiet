@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- With `--fix-plan`, the text report groups the alerts by package (the shape of the plan),
+  with one summary line for the fix checks instead of three or four lines per alert. A
+  known-exploited (KEV) alert is named on its package's line. On a fresh 0.48.0 run with 21
+  alerts, 20 of them tornado, the output went from 107 lines to 50, and the plan from line
+  79 to line 22. Without `--fix-plan`, every alert is listed as before.
+
 ### Fixed
 - A plan with nothing in it now says that the files asked for were not written
   (`Nothing in the plan yet, so plan.diff and plan.md were not written.`) and, when raising
