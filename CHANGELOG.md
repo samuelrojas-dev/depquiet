@@ -27,6 +27,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the lock also moved oaklib 0.7.4 → 0.7.5 and dropped six packages.
 
 ### Fixed
+- **The fix plan warns when the lock moves a package to an older version.** On
+  sparkgeo/prescient-sdk, the plan that keeps Python 3.9 showed `jupyterlab 4.5.7 → 2.3.2,`:
+  uv's line was `v4.5.7 -> v2.3.2, v4.x` (one copy per Python version), depquiet kept only
+  the first version, and nothing said 2.3.2 is a downgrade. Every final version is now
+  shown, downgrades are marked ⚠ and listed first, and the text output and pull request
+  description say to check them (and that raising requires-python may avoid them).
 - A fix the plan could not ask for is counted when the verified lock moves its package past
   the fix anyway. On sparkgeo/prescient-sdk the plan listed `jupyterlab → 4.5.11` as not
   included while the same lock moved jupyterlab 4.5.7 → 4.6.6. It now shows "moves past the
