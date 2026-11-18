@@ -1005,6 +1005,30 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
             args.fix_plan_report.write_text(
                 fix_plan_markdown(fix_plan, result, __version__), encoding="utf-8"
             )
+        if not fix_plan.included:
+            # Asked for files, got none: say so, instead of leaving the user to look
+            # for a plan.md that was never written.
+            unwritten = [
+                str(f)
+                for f in (
+                    args.fix_plan if args.fix_plan != "-" else None,
+                    args.fix_plan_report,
+                )
+                if f is not None
+            ]
+            if unwritten:
+                files = " and ".join(unwritten)
+                verb = "were" if len(unwritten) > 1 else "was"
+                print(
+                    f"   Nothing in the plan yet, so {files} {verb} not written.", file=sys.stderr
+                )
+            floor = fix_plan.python_floor
+            if floor is not None and floor.unblocked and not floor.adopted:
+                print(
+                    "   Run again with --raise-python-floor to plan the requires-python change "
+                    "described above.",
+                    file=sys.stderr,
+                )
         if args.apply and fix_plan.included:
             lockfile = "poetry.lock" if fix_plan.tool == "poetry" else "uv.lock"
             problem = apply_fix_plan(fix_plan, args.path)
