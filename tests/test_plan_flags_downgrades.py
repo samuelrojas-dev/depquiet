@@ -1,6 +1,6 @@
 """A plan that moves packages to older versions says so.
 
-On sparkgeo/prescient-sdk, the plan that keeps Python 3.9 showed
+On a public uv SDK, the plan that keeps Python 3.9 showed
 ``jupyterlab 4.5.7 → 2.3.2,``: uv's line was ``v4.5.7 -> v2.3.2, v4.x`` (one copy
 per Python version), depquiet kept only the first new version, and nothing
 said that jupyterlab 2.3.2 (2020) is a downgrade.

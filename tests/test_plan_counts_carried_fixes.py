@@ -1,6 +1,6 @@
 """A fix the plan could not ask for, but that the verified lock reaches anyway.
 
-On sparkgeo/prescient-sdk, the plan listed ``jupyterlab → 4.5.11`` under "Not
+On a public uv SDK, the plan listed ``jupyterlab → 4.5.11`` under "Not
 included" while the same verified lock moved jupyterlab 4.5.7 → 4.6.6, past the
 fix. The alert closes with that pull request; the report said it would not.
 """

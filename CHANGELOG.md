@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.48.0] - 2026-11-18
+
 ### Changed
 - The README, the PyPI summary and the Action description now lead with the verified fix
   plan, with the triage second. "What it is not" and "Compared to" say that Dependabot's
@@ -23,11 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   plan only reports the option, because dropping a Python version is the maintainer's
   call. In `--json` as `fix_plan.python_floor`. When the floor the fixes ask for still
   leaves uv splitting the lock just above it, with older packages below the split, the plan
-  moves to the exact floor: on sparkgeo/prescient-sdk, `>=3.11` gave Python 3.11.0–3.11.4
+  moves to the exact floor: on a public uv SDK, `>=3.11` gave Python 3.11.0–3.11.4
   beautifulsoup4 4.6.3 (2018), and the plan proposes `>=3.11.5`, which keeps one
-  beautifulsoup4 (verified by hand in a disposable VM). The split points come from the lock
-  uv writes on a temporary copy; up to three are tried, lowest first. Seen on real projects where Dependabot fails
-  repeatedly on pytest because the project still declares `>=3.9`.
+  beautifulsoup4 (confirmed on that project in a disposable VM). The split points come from
+  the lock uv writes on a temporary copy; up to three are tried, lowest first. Seen on real
+  projects where Dependabot fails repeatedly on pytest because the project still declares
+  `>=3.9`.
 - **`--fix-filtered`** (Action: `fix-pr-include-filtered`): `--check-fixes` and `--fix-plan`
   also cover filtered alerts (development-only, test-only, ...), which Dependabot keeps open
   until the package moves. Off by default. Works for uv and Poetry plans.
@@ -39,18 +42,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the lock also moved oaklib 0.7.4 → 0.7.5 and dropped six packages.
 
 ### Fixed
-- **The fix plan warns when the lock moves a package to an older version.** On
-  sparkgeo/prescient-sdk, the plan that keeps Python 3.9 showed `jupyterlab 4.5.7 → 2.3.2,`:
+- **The fix plan warns when the lock moves a package to an older version.** On a
+  public uv SDK, the plan that keeps Python 3.9 showed `jupyterlab 4.5.7 → 2.3.2,`:
   uv's line was `v4.5.7 -> v2.3.2, v4.x` (one copy per Python version), depquiet kept only
   the first version, and nothing said 2.3.2 is a downgrade. Every final version is now
   shown, downgrades are marked ⚠ and listed first, and the text output and pull request
   description say to check them (and that raising requires-python may avoid them).
 - A fix the plan could not ask for is counted when the verified lock moves its package past
-  the fix anyway. On sparkgeo/prescient-sdk the plan listed `jupyterlab → 4.5.11` as not
+  the fix anyway. On a public uv SDK the plan listed `jupyterlab → 4.5.11` as not
   included while the same lock moved jupyterlab 4.5.7 → 4.6.6. It now shows "moves past the
   fix with the rest of the plan", and the command stays the one that was verified. A fix
   retried with a raised Python floor that still fails gives that reason, not the old one.
-- Found on the first real run of the Python floor plan (sparkgeo/prescient-sdk):
+- Found on the first real run of the Python floor plan, on a public uv SDK:
   - a fix that uv says "only supports >3.9.0" (cryptography, which excludes 3.9.0 itself)
     was not read as a Python floor and was left out, although the plan already raised the
     floor past it;
@@ -1353,7 +1356,8 @@ requirements.txt and npm projects:
 - CI workflow with lint, typecheck, test matrix (3.11/3.12/3.13), and build
 - Automated release workflow with trusted PyPI publishing
 
-[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.6...HEAD
+[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.48.0...HEAD
+[0.48.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.6...v0.48.0
 [0.47.6]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.5...v0.47.6
 [0.47.5]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.4...v0.47.5
 [0.47.4]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.3...v0.47.4

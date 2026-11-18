@@ -1,4 +1,4 @@
-"""What the first real run of the Python floor plan (sparkgeo/prescient-sdk) showed.
+"""What the first real run of the Python floor plan (a public uv SDK) showed.
 
 - uv wrote ``cryptography==50.0.0 only supports >3.9.0`` (cryptography excludes
   3.9.0 itself): depquiet did not read ``>`` as a floor, so cryptography was left

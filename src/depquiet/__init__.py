@@ -1,3 +1,3 @@
 """depquiet — Cut through vulnerability alert noise."""
 
-__version__ = "0.47.6"
+__version__ = "0.48.0"
