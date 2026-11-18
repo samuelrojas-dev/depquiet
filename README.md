@@ -6,10 +6,37 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/samuelrojas-dev/depquiet/blob/main/LICENSE)
 [![codecov](https://codecov.io/gh/samuelrojas-dev/depquiet/graph/badge.svg)](https://codecov.io/gh/samuelrojas-dev/depquiet)
 
-**Tells you which dependency alerts never reach production, and shows the proof.**
+**Tells you what to change to close your dependency alerts, verified with your project's own
+resolver, and which alerts never reach production.**
 
-`pip-audit`, `uv audit`, `npm audit` and Dependabot report every advisory that matches a
-version range. depquiet reads your lockfile and dependency groups, drops the alerts that
+Scanners and Dependabot say "update X to 1.2.3". On a real project that is often not
+enough: your own pin blocks it, another package holds it back, the fix needs a newer Python
+than your `requires-python`, or the only lock that fits quietly moves something else back
+to a years-old release. For uv and Poetry projects, `depquiet --fix-plan` works out the
+change that closes the alerts, checks it with the resolver on a copy of the project, and
+says what else it moves:
+
+```bash
+pip install depquiet pip-audit
+depquiet --fix-plan plan.diff --fix-plan-report plan.md   # the diff, and a pull request description
+```
+
+On a public uv SDK with 71 open Dependabot alerts and `requires-python = ">=3.9"`
+(November 2026, run in a disposable VM):
+
+- **Keeping Python 3.9:** 10 packages' fixes install, but only by moving the Python 3.9
+  copies of jupyterlab back to 2.3.2, notebook to 6.4.8 and nbconvert to 4.3.0. depquiet
+  marks each one with ⚠ instead of calling the plan done.
+- **With `--raise-python-floor`:** 21 packages' fixes install together with
+  `requires-python = ">=3.11.5"`. Not `>=3.11`: with that floor, uv splits the lock at
+  3.11.5 and Python 3.11.0–3.11.4 get beautifulsoup4 4.6.3, from 2018.
+
+Its maintainers had reached the same "raise the floor and relock" change by hand, as had
+the maintainers of another uv project whose Dependabot pytest update had failed four times.
+depquiet verifies resolution only: whether your code works with the new versions is for
+your tests to say.
+
+It also triages. depquiet reads your lockfile and dependency groups, drops the alerts that
 only your development tools install, and keeps everything else: an alert is only dismissed
 when the lockfile proves it.
 
@@ -71,9 +98,14 @@ Runs locally, no account, MIT.
 
 ### What it is not
 
-depquiet works at the level of packages, not functions. It cannot tell you that an imported
-package's vulnerable function is never called; Snyk, Endor Labs and, for Go,
-`govulncheck` go further there. If your project is on uv, `uv audit --no-dev` gives you the
+depquiet's triage works at the level of packages, not functions. It cannot tell you that an
+imported package's vulnerable function is never called; Snyk, Endor Labs and, for Go,
+`govulncheck` go further there. So does GitHub: since October 2026, Dependabot's
+[reachability analysis](https://github.blog/changelog/2026-10-28-prioritize-dependabot-alerts-with-reachability-analysis/)
+(public preview, JavaScript and TypeScript, GitHub Enterprise Cloud) looks for a call path
+to the vulnerable function. Where you have it, it is the deeper verdict for those projects.
+None of these plan the fix: which requirement, Python floor or lock change closes the alert,
+verified with the resolver. If your project is on uv, `uv audit --no-dev` gives you the
 plain dev/production split natively; depquiet adds every group judged by name, the
 dependency path, EPSS and mixed npm/Python repositories.
 
@@ -1641,6 +1673,17 @@ commits into `benchmarks/.cache/`; `benchmarks/capture_real.py` re-captures the 
 synthetic fixtures in the same report are parser regression tests, not evidence.
 
 ## Compared to
+
+| | depquiet | Dependabot alerts + reachability (preview) | `uv audit --no-dev` |
+|:--|:--|:--|:--|
+| Fixes | one plan for all fixes, with the requirement, Python floor and lock changes, verified together (uv, Poetry) | security update pull requests, one per package; fails when the fix does not resolve | no |
+| When a fix is blocked | names the blocker and the change that lifts it, verified | names the conflicting dependency in the failed update's message | no |
+| Warns when the fix moves other packages back | yes | not documented | no |
+| Reachability | package level, 10 ecosystems | function level, JS/TS | no |
+| Dev-only alerts | every group, by name and lockfile | a runtime/development scope on each alert | excluded (uv groups) |
+| Where it runs | anywhere: CLI, any CI, any scanner's report | GitHub (Enterprise Cloud for the preview) | anywhere |
+
+Read from each tool's documentation in November 2026; preview features change.
 
 depquiet ingests reports from npm audit, pip-audit, Trivy, Grype, Dependabot,
 Snyk and SARIF-producing tools. It adds dependency/import context, configurable

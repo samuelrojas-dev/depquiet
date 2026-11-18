@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- The README, the PyPI summary and the Action description now lead with the verified fix
+  plan, with the triage second. "What it is not" and "Compared to" say that Dependabot's
+  reachability analysis (October 2026 preview, JavaScript/TypeScript, GitHub Enterprise
+  Cloud) checks call paths, a deeper verdict than depquiet's package-level one for those
+  projects.
+
 ### Added
 - **The fix plan checks whether raising `requires-python` unblocks the fixes that need a
   newer Python** (uv projects). It raises the floor on the temporary copy, asks uv again,
