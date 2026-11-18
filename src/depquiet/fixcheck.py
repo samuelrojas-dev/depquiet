@@ -48,6 +48,8 @@ class FixCheck:
     also_upgrade: list[str] = field(default_factory=list)
     # ``name vOLD -> vNEW`` for every package that changes when it resolves.
     updates: list[str] = field(default_factory=list)
+    # The lowest Python the fix supports ("3.11"), when that is what blocks it.
+    python_floor: str = ""
 
     @property
     def command(self) -> str:
@@ -65,27 +67,33 @@ class FixCheck:
             "next_step": self.next_step,
             "also_upgrade": self.also_upgrade,
             "updates": self.updates,
+            "python_floor": self.python_floor or None,
         }
 
 
-def fix_targets(result: ScanResult) -> dict[str, str]:
+def fix_targets(result: ScanResult, *, include_filtered: bool = False) -> dict[str, str]:
     """Package -> the highest fixed version among its alerts still shown.
 
-    That one upgrade clears every shown alert of the package.
+    That one upgrade clears every shown alert of the package. With
+    ``include_filtered``, filtered alerts (development-only, test-only, ...)
+    count too: depquiet says they need no action, but a scanner such as
+    Dependabot keeps them open until the package moves.
     """
     targets: dict[str, str] = {}
-    for package, version in _alert_targets(result):
+    for package, version in _alert_targets(result, include_filtered=include_filtered):
         if package not in targets or version_key(version) > version_key(targets[package]):
             targets[package] = version
     return targets
 
 
-def _alert_targets(result: ScanResult) -> list[tuple[str, str]]:
+def _alert_targets(result: ScanResult, *, include_filtered: bool = False) -> list[tuple[str, str]]:
     """(package, fix version) of every shown alert that has a Python fix."""
     pairs: list[tuple[str, str]] = []
     for finding in result.results:
         manager = finding.vuln.package_manager or result.package_manager
-        if finding.verdict == Verdict.FILTERED or not finding.vuln.fix_version:
+        if finding.verdict == Verdict.FILTERED and not include_filtered:
+            continue
+        if not finding.vuln.fix_version:
             continue
         if manager not in _PYTHON_MANAGERS or finding.vuln.fix_package:
             continue
@@ -122,7 +130,8 @@ _NAME = r"[A-Za-z0-9][A-Za-z0-9_.\-]*"
 _EXTRA = r"(?:\[[^\]]*\])?"
 _MARKER = r"(?:\{[^}]*\})?"
 _SPEC = r"(?:==|>=|<=|!=|~=|<|>)[^\s,]*(?:,(?:==|>=|<=|!=|~=|<|>)[^\s,]*)*"
-_UPDATE = re.compile(rf"Update ({_NAME}) (v\S+ -> v\S+)", re.I)
+# A lock forked by Python version lists every locked version: ``v8.4.2, v9.2.0 -> v9.2.0``.
+_UPDATE = re.compile(rf"Update ({_NAME}) (v[^\s,]+(?:, v[^\s,]+)* -> v\S+)", re.I)
 
 
 def _pep503(name: str) -> str:
@@ -182,10 +191,14 @@ def _classify(check: FixCheck, text: str) -> None:
     )
     if floor:
         check.reason = "python"
+        lowest = re.fullmatch(r">=\s*(\d+(?:\.\d+)*)", floor.group(1))
+        check.python_floor = lowest.group(1) if lowest else ""
         check.next_step = (
             f"{package} {version} only supports Python {floor.group(1)}: raise "
             "requires-python, or limit the upgrade to those Python versions with a marker."
         )
+        if check.python_floor:
+            check.next_step += " --fix-plan checks whether raising it lets the fix install."
         return
     pin = _own_pin(text, package, version)
     if pin:
@@ -297,9 +310,11 @@ def check_fix(
     return check
 
 
-def check_fixes(result: ScanResult, project: Path) -> tuple[dict[str, FixCheck], str]:
+def check_fixes(
+    result: ScanResult, project: Path, *, include_filtered: bool = False
+) -> tuple[dict[str, FixCheck], str]:
     """Check every shown alert's fix; returns (checks by package, note)."""
-    targets = fix_targets(result)
+    targets = fix_targets(result, include_filtered=include_filtered)
     if not targets:
         return {}, ""
     # The project's lockfile first: on a project without one, installing uv
@@ -320,7 +335,7 @@ def check_fixes(result: ScanResult, project: Path) -> tuple[dict[str, FixCheck],
     # its own answer when the highest is blocked: a backport (0.3.81 next to
     # 1.2.22) may install where the newest line does not.
     answers = {(pkg, check.version): check for pkg, check in checks.items()}
-    for pair in sorted(set(_alert_targets(result))):
+    for pair in sorted(set(_alert_targets(result, include_filtered=include_filtered))):
         package, version = pair
         if pair not in answers:
             if checks[package].status == "resolves":
@@ -329,7 +344,7 @@ def check_fixes(result: ScanResult, project: Path) -> tuple[dict[str, FixCheck],
                 answers[pair] = check_fix(project, package, version, project_names=names)
     for finding in result.results:
         pair = (finding.vuln.package, finding.vuln.fix_version)
-        if pair in answers and finding.verdict != Verdict.FILTERED:
+        if pair in answers and (include_filtered or finding.verdict != Verdict.FILTERED):
             finding.fix_check = answers[pair]
     return checks, ""
 

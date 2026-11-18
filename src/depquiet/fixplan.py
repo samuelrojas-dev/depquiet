@@ -24,6 +24,14 @@ only, one second after the fix was published. The rest of the project keeps
 the cooldown, and the package cannot move past the fix release either, which
 is what uv's maintainers suggest instead of a blanket bypass (astral-sh/uv#18995).
 
+A fix that only supports a newer Python than the project's ``requires-python``
+(pytest 9 on a project that still declares ``>=3.9``) is checked once more,
+on a copy with the floor raised to what the fix needs: if it resolves, the
+plan says so, with the exact edit. Dropping a Python version is the
+maintainer's decision (harmless for an application, a breaking change for a
+published library), so the edit goes into the diff only with
+``--raise-python-floor``.
+
 The result is a unified diff of the ``pyproject.toml`` edits plus the
 ``uv lock`` command to run. Nothing in the project is changed. What is
 verified is resolution only: whether the code works with the new versions
@@ -100,6 +108,8 @@ class PlanItem:
     why: str = ""  # why it is left out
     published: str = ""  # set when the plan exempts the fix from a cooldown
     expires: str = ""  # when a rolling cooldown admits the fix by itself
+    python_floor: str = ""  # set when the plan raises requires-python for it
+    fixed_in: str = ""  # the advisory's fix, when ``version`` is a newer release already locked
 
     @property
     def major_jump(self) -> bool:
@@ -129,6 +139,32 @@ class LockChange:
 
 
 @dataclass
+class PythonFloor:
+    """Raising ``requires-python``: which fixes it lets install, verified on a copy."""
+
+    floor: str  # "3.10": the new floor is ``>=3.10``
+    edits: list[PlanEdit] = field(default_factory=list)
+    unblocked: list[str] = field(default_factory=list)  # packages it lets install
+    still_blocked: list[str] = field(default_factory=list)  # still do not resolve
+    alerts: int = 0  # shown alerts the unblocked fixes clear
+    dropped: str = ""  # "3.9", "3.8 and 3.9": the Python versions it stops supporting
+    adopted: bool = False  # in the diff (--raise-python-floor)
+    problem: str = ""  # why it could not be planned
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "floor": f">={self.floor}",
+            "drops_python": self.dropped or None,
+            "unblocks": self.unblocked,
+            "still_blocked": self.still_blocked,
+            "alerts_cleared": self.alerts,
+            "adopted": self.adopted,
+            "problem": self.problem or None,
+            "edits": [e.__dict__ for e in self.edits],
+        }
+
+
+@dataclass
 class FixPlan:
     status: str  # "verified", "partial", "none", "unsupported"
     items: list[PlanItem] = field(default_factory=list)
@@ -139,6 +175,17 @@ class FixPlan:
     # fix, packages that are no longer required. A reviewer sees these in the
     # lockfile diff, so the plan names them.
     lock_changes: list[LockChange] = field(default_factory=list)
+    python_floor: PythonFloor | None = None
+    # Planned for filtered alerts too (--fix-filtered): the report lists them.
+    include_filtered: bool = False
+
+    @property
+    def edits(self) -> list[PlanEdit]:
+        """Every file edit of the plan: the fixes', then a raised Python floor."""
+        found = [e for i in self.included for e in i.edits]
+        if self.python_floor is not None and self.python_floor.adopted:
+            found += self.python_floor.edits
+        return found
 
     @property
     def included(self) -> list[PlanItem]:
@@ -174,6 +221,7 @@ class FixPlan:
                 {
                     "package": i.package,
                     "version": i.version,
+                    "fixed_in": i.fixed_in or None,
                     "installed": i.installed,
                     "major_version_change": i.major_jump,
                     "also_upgrade": i.also_upgrade,
@@ -197,6 +245,7 @@ class FixPlan:
                 {"package": c.package, "from": c.old or None, "to": c.new or None}
                 for c in self.lock_changes
             ],
+            "python_floor": self.python_floor.to_dict() if self.python_floor else None,
         }
 
 
@@ -360,6 +409,8 @@ def unique_edits(edits: list[PlanEdit]) -> list[PlanEdit]:
 
 
 def _edit_text(text: str, edit: PlanEdit) -> str:
+    if edit.kind == "python":
+        return _set_requires_python(text, edit.old, edit.new)
     if edit.kind == "cooldown":
         return _set_cooldown(text, edit.file, edit.package, edit.new)
     if edit.kind == "poetry":
@@ -629,16 +680,30 @@ def _cooldown_edits(project: Path, check: FixCheck) -> list[PlanEdit] | str:
     return [PlanEdit(file=file, package=check.package, old=old, new=new, kind="cooldown")]
 
 
-def _locked_versions(project: Path) -> dict[str, str]:
+def _locked_versions(project: Path, *, highest: bool = False) -> dict[str, str]:
+    """Package -> its locked version.
+
+    A lock forked by Python version holds a package twice (pytest 8.4.2 for
+    Python 3.9, 9.2.0 for 3.10+). The lowest is the one an alert is about,
+    so it is the default.
+    """
     try:
         lock = tomllib.loads((project / "uv.lock").read_text(encoding="utf-8"))
     except (OSError, tomllib.TOMLDecodeError):
         return {}
-    return {
-        _pep503(p["name"]): p.get("version", "")
-        for p in lock.get("package", [])
-        if isinstance(p, dict) and "name" in p
-    }
+    found: dict[str, str] = {}
+    for p in lock.get("package", []):
+        if not isinstance(p, dict) or "name" not in p:
+            continue
+        key, version = _pep503(p["name"]), str(p.get("version", ""))
+        known = found.get(key)
+        if (
+            known is None
+            or (highest and version_key(version) > version_key(known))
+            or (not highest and version_key(version) < version_key(known))
+        ):
+            found[key] = version
+    return found
 
 
 def _resolves(
@@ -767,6 +832,165 @@ def _edits_matching(project: Path, package: str) -> list[PlanEdit]:
     return found
 
 
+# --- the Python floor (requires-python) --------------------------------------
+
+_REQUIRES_PYTHON = re.compile(
+    r"""^(?P<lead>\s*requires-python\s*=\s*)(?P<q>["'])(?P<spec>[^"']*)(?P=q)"""
+)
+
+
+def raise_floor(spec: str, floor: str) -> str | None:
+    """``requires-python`` raised to at least ``floor``; None if that cannot be written.
+
+    ``>=3.9`` → ``>=3.10``; ``>=3.9,<4`` → ``>=3.10,<4`` (upper bounds kept).
+    A spec that already admits nothing below ``floor`` comes back unchanged.
+    None when an upper bound excludes ``floor`` or a clause is not a plain
+    bound (``~=``, ``==3.9.*``): those are for a person to rewrite.
+    """
+    clauses = [c.strip() for c in spec.split(",") if c.strip()]
+    parsed = [_CLAUSE.match(c) for c in clauses]
+    if any(p is None for p in parsed):
+        return None
+    out: list[str] = []
+    covered = False
+    for match in parsed:
+        assert match is not None
+        op, bound = match.group(1), match.group(2)
+        if op in (">=", ">"):
+            if version_key(bound) >= version_key(floor):
+                covered = True
+                out.append(f"{op}{bound}")
+            continue  # a lower floor is replaced
+        if op in ("<", "<=", "!=") and "*" not in bound:
+            if not _satisfies(floor, op, bound):
+                return None
+            out.append(f"{op}{bound}")
+            continue
+        return None
+    if not covered:
+        out.insert(0, f">={floor}")
+    return (", " if ", " in spec else ",").join(out)
+
+
+def _old_floor(spec: str) -> str:
+    """The lowest Python a ``requires-python`` admits, from its ``>=`` clause."""
+    bounds = [m.group(2) for c in spec.split(",") if (m := _CLAUSE.match(c)) and m.group(1) == ">="]
+    return max(bounds, key=version_key) if bounds else ""
+
+
+def dropped_pythons(old: str, new: str) -> str:
+    """``3.8``, ``3.10`` → ``3.8 and 3.9``: the minor versions a raised floor stops supporting."""
+    a, b = old.split("."), new.split(".")
+    if len(a) < 2 or len(b) < 2 or a[0] != "3" or b[0] != "3":
+        return ""
+    if not (a[1].isdigit() and b[1].isdigit()):
+        return ""
+    minors = [f"3.{m}" for m in range(int(a[1]), int(b[1]))]
+    if not minors:
+        return ""
+    return minors[0] if len(minors) == 1 else ", ".join(minors[:-1]) + " and " + minors[-1]
+
+
+def _set_requires_python(text: str, old: str, new: str) -> str:
+    """Replace ``requires-python`` in the ``[project]`` table only."""
+    lines = text.splitlines(keepends=True)
+    span = _section(lines, "project")
+    if span is None:
+        return text
+    for i in range(*span):
+        match = _REQUIRES_PYTHON.match(lines[i])
+        if match and match.group("spec") == old:
+            q = match.group("q")
+            lines[i] = match.group("lead") + q + new + q + lines[i][match.end() :]
+            break
+    return "".join(lines)
+
+
+def _floor_edits(project: Path, floor: str) -> tuple[list[PlanEdit], str, str]:
+    """(edits, dropped versions, problem) for raising every member's floor to ``floor``."""
+    edits: list[PlanEdit] = []
+    olds: list[str] = []
+    for path in _member_pyprojects(project):
+        try:
+            data = tomllib.loads(path.read_text(encoding="utf-8"))
+        except (OSError, tomllib.TOMLDecodeError):
+            continue
+        spec = (data.get("project") or {}).get("requires-python")
+        if not isinstance(spec, str):
+            continue
+        rel = str(path.resolve().relative_to(project.resolve())).replace("\\", "/")
+        new = raise_floor(spec, floor)
+        if new is None:
+            problem = f"{rel} declares requires-python {spec!r}, which depquiet will not rewrite."
+            return [], "", problem
+        if new != spec:
+            text = path.read_text(encoding="utf-8")
+            if _set_requires_python(text, spec, new) == text:
+                return [], "", f"depquiet could not edit requires-python in {rel} safely."
+            edits.append(PlanEdit(rel, "python", spec, new, kind="python"))
+            if _old_floor(spec):
+                olds.append(_old_floor(spec))
+    if not edits:
+        return [], "", "no pyproject.toml declares a requires-python below the fix's floor."
+    lowest = min(olds, key=version_key) if olds else ""
+    return edits, dropped_pythons(lowest, floor) if lowest else "", ""
+
+
+def _plan_python_floor(
+    project: Path,
+    executable: str,
+    kept: list[PlanItem],
+    waiting: list[PlanItem],
+    floors: dict[str, str],
+    result: ScanResult,
+    timeout: int,
+    include_filtered: bool = False,
+) -> tuple[PythonFloor, str]:
+    """Check, on a copy, which fixes install once requires-python is raised.
+
+    Returns the option and uv's report of that resolution ("" if none did).
+
+    The floor is the highest any waiting fix needs, so one edit covers them
+    all. The fixes already in the plan stay in the check: the floor is
+    proposed only if everything resolves together.
+    """
+    floor = max(floors.values(), key=version_key)
+    edits, dropped, problem = _floor_edits(project, floor)
+    option = PythonFloor(floor, edits=edits, dropped=dropped, problem=problem)
+    if problem:
+        option.still_blocked = [i.package for i in waiting]
+        return option, ""
+    with tempfile.TemporaryDirectory(prefix="depquiet-fixplan-") as tmp:
+        root = Path(tmp) / "project"
+        shutil.copytree(project, root, ignore=_COPY_IGNORE, symlinks=True)
+        _apply(root, [e for i in kept for e in i.edits] + edits)
+        local: list[str] = []
+        reason = _resolves(root, executable, [*kept, *waiting], timeout, local)
+        if reason is None:
+            unblocked = list(waiting)
+        else:
+            unblocked = []
+            for item in waiting:
+                reason = _resolves(root, executable, [*kept, *unblocked, item], timeout, local)
+                if reason is None:
+                    unblocked.append(item)
+                else:
+                    item.why = (
+                        f"needs Python >={floors[item.package]}, and with requires-python "
+                        f"raised to >={floor} it still does not resolve: {reason}"
+                    )
+    option.unblocked = [i.package for i in unblocked]
+    option.still_blocked = [i.package for i in waiting if i not in unblocked]
+    keys = {_pep503(i.package) for i in unblocked}
+    option.alerts = sum(
+        1
+        for r in result.results
+        if (include_filtered or r.verdict is not Verdict.FILTERED)
+        and _pep503(r.vuln.package) in keys
+    )
+    return option, (local[0] if unblocked and local else "")
+
+
 # Shown when the project has no lockfile --fix-plan can work with.
 UNSUPPORTED_NOTE = (
     "--fix-plan works on uv projects (uv.lock) and Poetry projects (poetry.lock). "
@@ -783,12 +1007,14 @@ def build_fix_plan(
     checks: dict[str, FixCheck],
     *,
     timeout: int = 300,
+    raise_python_floor: bool = False,
+    include_filtered: bool = False,
 ) -> FixPlan:
     # The project first: fix_targets counts Python alerts only, so on an npm
     # project "nothing to fix" would be false.
     if not (project / "uv.lock").is_file():
         return FixPlan("unsupported", note=UNSUPPORTED_NOTE)
-    targets = fix_targets(result)
+    targets = fix_targets(result, include_filtered=include_filtered)
     if not targets:
         return FixPlan("none", note=NOTHING_TO_FIX)
     found = shutil.which("uv")
@@ -796,7 +1022,11 @@ def build_fix_plan(
         return FixPlan("unsupported", note="--fix-plan needs uv on PATH.")
     executable = found
     installed = _locked_versions(project)
+    newest = _locked_versions(project, highest=True)
     items: list[PlanItem] = []
+    # Fixes held back only by the project's Python floor: checked again below,
+    # once the plan without them is known.
+    floors: dict[str, str] = {}
     for package, version in sorted(targets.items()):
         item = PlanItem(package, version, installed.get(_pep503(package), ""))
         check = checks.get(package)
@@ -822,20 +1052,93 @@ def build_fix_plan(
             chained = _plan_chain(project, executable, item, check.also_upgrade, installed, timeout)
             if isinstance(chained, str):
                 item.why = chained
+        elif check.reason == "python" and check.python_floor:
+            floors[package] = check.python_floor
+            item.why = check.next_step
+            # In a lock forked by Python version, the newer fork may already be
+            # past the fix: aim there, so that fork is not moved back down.
+            ahead = newest.get(_pep503(package), "")
+            if ahead and version_key(ahead) > version_key(version):
+                item.fixed_in, item.version = version, ahead
         else:
             item.why = check.next_step or check.detail
         items.append(item)
 
     candidates = [i for i in items if not i.why]
-    if not candidates:
+    waiting = [i for i in items if i.package in floors]
+    if not candidates and not waiting:
         return FixPlan("none", items=items, note="No fix could be planned.")
 
+    report: list[str] = []
+    if candidates:
+        _verify_candidates(project, executable, candidates, timeout, report)
+    option = None
+    if waiting:
+        kept = [i for i in candidates if i.included]
+        option, floor_report = _plan_python_floor(
+            project, executable, kept, waiting, floors, result, timeout, include_filtered
+        )
+        unblocked = [i for i in waiting if i.package in option.unblocked]
+        for item in unblocked:
+            if raise_python_floor:
+                item.included = True
+                item.python_floor = option.floor
+            else:
+                item.why = (
+                    f"needs Python >={floors[item.package]}: raising requires-python to "
+                    f">={option.floor} lets it install (verified; --raise-python-floor adds "
+                    "that change to the plan)."
+                )
+        if raise_python_floor and unblocked:
+            option.adopted = True
+            report[:] = [floor_report]
+
+    included = [i for i in items if i.included]
+    edits = [e for i in included for e in i.edits]
+    if option is not None and option.adopted:
+        edits += option.edits
+    diff = _diff(project, edits)
+    if not included:
+        status = "none"
+    elif all(i.included for i in items):
+        status = "verified"
+    else:
+        status = "partial"
+    note = "Verified with uv's resolver only: run your tests, above all for a major version change."
+    if any(i.published for i in included):
+        note += (
+            " A cooldown exemption admits a release younger than your cooldown: check that "
+            "it is the advisory's fix and comes from the project's usual publisher. Remove "
+            "it once your cooldown admits the fix by itself: left in place, it holds the "
+            "package on that release."
+        )
+    if option is not None and option.adopted:
+        note += (
+            f" The plan raises requires-python to >={option.floor}: users on older Python "
+            "versions can no longer install the project."
+        )
+    plan = FixPlan(
+        status,
+        items=items,
+        diff=diff,
+        note=note,
+        python_floor=option,
+        include_filtered=include_filtered,
+    )
+    if included and report:
+        plan.lock_changes = _uv_lock_changes(report[0], included)
+    return plan
+
+
+def _verify_candidates(
+    project: Path, executable: str, candidates: list[PlanItem], timeout: int, report: list[str]
+) -> None:
+    """Mark the largest set of candidates that resolves together as included."""
     with tempfile.TemporaryDirectory(prefix="depquiet-fixplan-") as tmp:
         root = Path(tmp) / "project"
         shutil.copytree(project, root, ignore=_COPY_IGNORE, symlinks=True)
         everything = [e for i in candidates for e in i.edits]
         _apply(root, everything)
-        report: list[str] = []
         failure = _resolves(root, executable, candidates, timeout, report)
         if failure is None:
             for item in candidates:
@@ -855,30 +1158,11 @@ def build_fix_plan(
                     _revert(root, item.edits)
                     item.why = f"does not resolve together with the rest: {reason}"
 
-    included = [i for i in items if i.included]
-    diff = _diff(project, [e for i in included for e in i.edits])
-    if not included:
-        status = "none"
-    elif all(i.included for i in items):
-        status = "verified"
-    else:
-        status = "partial"
-    note = "Verified with uv's resolver only: run your tests, above all for a major version change."
-    if any(i.published for i in included):
-        note += (
-            " A cooldown exemption admits a release younger than your cooldown: check that "
-            "it is the advisory's fix and comes from the project's usual publisher. Remove "
-            "it once your cooldown admits the fix by itself: left in place, it holds the "
-            "package on that release."
-        )
-    plan = FixPlan(status, items=items, diff=diff, note=note)
-    if included and report:
-        plan.lock_changes = _uv_lock_changes(report[0], included)
-    return plan
 
-
+# A lock forked by Python version lists each locked version: ``Update x v1.0, v2.0 -> v2.0``.
 _LOCK_LINE = re.compile(
-    r"^\s*(Update|Add|Remove)\s+([A-Za-z0-9][A-Za-z0-9._-]*)\s+v(\S+)(?:\s+->\s+v(\S+))?",
+    r"^\s*(Update|Add|Remove)\s+([A-Za-z0-9][A-Za-z0-9._-]*)\s+(v[^\s,]+(?:,\s*v[^\s,]+)*)"
+    r"(?:\s+->\s+v(\S+))?",
     re.M,
 )
 
@@ -888,9 +1172,10 @@ def _uv_lock_changes(report: str, included: list[PlanItem]) -> list[LockChange]:
     planned = {_pep503(i.package) for i in included}
     planned |= {_pep503(s.split("==")[0]) for i in included for s in i.also_upgrade}
     changes: list[LockChange] = []
-    for verb, name, first, second in _LOCK_LINE.findall(report):
+    for verb, name, versions, second in _LOCK_LINE.findall(report):
         if _pep503(name) in planned:
             continue
+        first = ", ".join(v.strip()[1:] for v in versions.split(","))
         if verb == "Update":
             changes.append(LockChange(name, first, second))
         elif verb == "Add":
@@ -939,8 +1224,7 @@ def apply_fix_plan(plan: FixPlan, project: Path, *, timeout: int = 900) -> str:
         return f"{tool} is not on PATH."
     if not plan.included:
         return "the plan has no fix to apply."
-    edits = [e for item in plan.included for e in item.edits]
-    seen = unique_edits(edits)
+    seen = unique_edits(plan.edits)
     touched = sorted({e.file for e in seen} | {lockfile})
     before = {name: (project / name).read_bytes() for name in touched if (project / name).is_file()}
 
@@ -982,6 +1266,8 @@ def apply_fix_plan(plan: FixPlan, project: Path, *, timeout: int = 900) -> str:
 
 def _how(item: PlanItem) -> str:
     own = [e for e in item.edits if _pep503(e.package) == _pep503(item.package)]
+    if item.python_floor:
+        return f"raises `requires-python` to `>={item.python_floor}`, which the fix needs"
     if item.published:
         text = (
             "exempted from the `exclude-newer` cooldown, only up to this release "
@@ -1011,7 +1297,7 @@ def fix_plan_markdown(plan: FixPlan, result: ScanResult, version: str = "") -> s
 
     advisories: dict[str, list[str]] = {}
     for r in result.results:
-        if r.verdict is not Verdict.FILTERED:
+        if plan.include_filtered or r.verdict is not Verdict.FILTERED:
             known = advisories.setdefault(_pep503(r.vuln.package), [])
             if r.vuln.cve not in known:
                 known.append(r.vuln.cve)
@@ -1022,6 +1308,8 @@ def fix_plan_markdown(plan: FixPlan, result: ScanResult, version: str = "") -> s
         if plan.tool == "poetry"
         else "`pyproject.toml`/`uv.toml` requirements and `uv.lock`"
     )
+    if plan.python_floor is not None and plan.python_floor.adopted:
+        files = "`pyproject.toml` requirements and `requires-python`, and `uv.lock`"
     confirmed = "this fix installs" if n == 1 else f"these {n} fixes install together"
     lines = [
         "## Security fixes verified by depquiet",
@@ -1042,6 +1330,19 @@ def fix_plan_markdown(plan: FixPlan, result: ScanResult, version: str = "") -> s
         lockfile = "poetry.lock" if plan.tool == "poetry" else "uv.lock"
         lines += ["", f"### Other changes in `{lockfile}`", ""]
         lines += [f"- {cell(c.describe())}" for c in plan.lock_changes]
+    floor = plan.python_floor
+    if floor is not None and floor.adopted:
+        lines += [
+            "",
+            "### Python floor",
+            "",
+            f"Raises `requires-python` to `>={floor.floor}`, which "
+            + ("this fix needs" if len(floor.unblocked) == 1 else "these fixes need")
+            + f": {', '.join(f'`{cell(n)}`' for n in floor.unblocked)}. Python "
+            + (floor.dropped or f"below {floor.floor}")
+            + " is no longer supported: fine for an application, a breaking change for "
+            "users of a published library.",
+        ]
     if plan.left_out:
         lines += ["", "### Not included", ""]
         lines += [
@@ -1063,6 +1364,40 @@ def fix_plan_markdown(plan: FixPlan, result: ScanResult, version: str = "") -> s
     return "\n".join(lines) + "\n"
 
 
+def python_floor_lines(option: PythonFloor | None) -> list[str]:
+    """What raising requires-python would do, in plain lines ([] when not relevant)."""
+    if option is None:
+        return []
+    lines = ["", "Python floor:"]
+    if option.problem:
+        lines.append(f"  some fixes need a newer Python, but {option.problem}")
+        return lines
+    if not option.unblocked:
+        lines.append(
+            f"  raising requires-python to >={option.floor} does not let the waiting fixes "
+            "install either."
+        )
+        return lines
+    fixes = "fix" if len(option.unblocked) == 1 else "fixes"
+    alerts = "alert" if option.alerts == 1 else "alerts"
+    lines.append(
+        f"  Raising requires-python to >={option.floor} "
+        f"{'lets' if option.adopted else 'would let'} {len(option.unblocked)} more {fixes} "
+        f"install ({', '.join(option.unblocked)}; {option.alerts} {alerts}), verified with "
+        "uv's resolver."
+    )
+    drop = f"Python {option.dropped}" if option.dropped else f"Python below {option.floor}"
+    lines.append(
+        f"  It drops {drop}: fine for an application, a breaking change for users of a "
+        "published library."
+    )
+    if option.still_blocked:
+        lines.append(f"  Still blocked even then: {', '.join(option.still_blocked)}.")
+    if not option.adopted:
+        lines.append("  Add --raise-python-floor to put that change in the plan.")
+    return lines
+
+
 def print_fix_plan(plan: FixPlan, file: Any) -> None:
     """Human summary (to stderr); the diff itself is written by the caller."""
     print("\n🔧 Fix plan", file=file)
@@ -1072,7 +1407,9 @@ def print_fix_plan(plan: FixPlan, file: Any) -> None:
     for item in plan.included:
         jump = "  (major version change)" if item.major_jump else ""
         own = [e for e in item.edits if _pep503(e.package) == _pep503(item.package)]
-        if item.published:
+        if item.python_floor:
+            how = f"raise requires-python to >={item.python_floor}, which the fix needs"
+        elif item.published:
             how = (
                 f"exempt it from your exclude-newer cooldown, only up to this release "
                 f"(published {item.published[:10]}"
@@ -1090,13 +1427,25 @@ def print_fix_plan(plan: FixPlan, file: Any) -> None:
             f"   ✓ {item.package} {item.installed or '?'} → {item.version}: {how}{jump}",
             file=file,
         )
+        if item.fixed_in:
+            print(
+                f"     (fixed in {item.fixed_in}; {item.version} is already in your lock "
+                "for newer Pythons, so that copy is not moved back)",
+                file=file,
+            )
+    floor = plan.python_floor
     for item in plan.left_out:
-        print(f"   ✗ {item.package} → {item.version}: {clip(item.why, 200)}", file=file)
+        why = item.why
+        if floor is not None and not floor.adopted and item.package in floor.unblocked:
+            why = "needs a newer Python: see Python floor below"
+        print(f"   ✗ {item.package} → {item.version}: {clip(why, 200)}", file=file)
     if plan.lock_changes:
         lockfile = "poetry.lock" if plan.tool == "poetry" else "uv.lock"
         print(f"\n   It also changes {lockfile}:", file=file)
         for change in plan.lock_changes:
             print(f"     · {change.describe()}", file=file)
+    for line in python_floor_lines(plan.python_floor):
+        print(f"   {line}" if line else "", file=file)
     if plan.included:
         verdict = (
             "all fixes resolve together"

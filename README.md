@@ -616,7 +616,7 @@ Real run on a small project pinning `requests==2.31.0` and `botocore==1.29.0` (w
 ```
 
 After `git apply` and that command, pip-audit reports no known vulnerabilities in the
-project's dependencies. Python-floor blocks are reported, not planned.
+project's dependencies.
 
 The plan also names everything else the verified lock moves, because a reviewer sees it in
 the lockfile diff: a parent that has to move with a fix without any requirement change, and
@@ -635,6 +635,45 @@ setuptools below 82:
 ```
 
 When only the lockfile moves, there is no diff to write, and depquiet says so.
+
+#### Fixes that need a newer Python (`--raise-python-floor`)
+
+A project that still declares `requires-python = ">=3.9"` cannot take a fix that supports
+only 3.10 and up, even if it runs on 3.12: uv has to find versions for every Python the
+project claims. Dependabot then fails on that update again and again. depquiet raises the
+floor to what the fixes need **on the temporary copy**, asks uv again, and says what that
+unblocks. Dropping a Python version is your decision (harmless for an application, a
+breaking change for the users of a published library), so the edit goes into the plan only
+with `--raise-python-floor`. Real run with uv 0.11 on a small project with
+`requires-python = ">=3.9"`, pytest locked twice (8.4.2 for 3.9, 9.2.0 for 3.10+) and an
+alert fixed in pytest 9.0.0:
+
+```
+🔧 Fix plan
+   ✓ tornado 6.4.1 → 6.5: upgrade
+   ✗ pytest → 9.2.0: needs a newer Python: see Python floor below
+
+   Python floor:
+     Raising requires-python to >=3.10 would let 1 more fix install (pytest; 1 alert), verified with uv's resolver.
+     It drops Python 3.9: fine for an application, a breaking change for users of a published library.
+     Add --raise-python-floor to put that change in the plan.
+```
+
+With `--raise-python-floor`, the diff changes `requires-python = ">=3.9"` to `">=3.10"`
+(upper bounds such as `<4` are kept; `~=` and `==3.9.*` are left for you to rewrite), and
+`--apply` leaves pytest 9.2.0 as the only copy in `uv.lock`. The target is 9.2.0, not the
+fix's 9.0.0, because the lock already had 9.2.0 for newer Pythons: the plan does not move
+it back down. Workspace members whose own floor is lower are raised too. uv projects only
+for now; on Poetry the `python` constraint is left as it is. The Action's input is
+`fix-pr-raise-python-floor`.
+
+#### Fixing filtered alerts too (`--fix-filtered`)
+
+The plan covers the alerts depquiet shows. A filtered alert (pytest in a `dev` group, say)
+needs no action by depquiet's reading, but Dependabot keeps it open until the package moves.
+`--fix-filtered` (Action: `fix-pr-include-filtered`) checks and plans those fixes as well,
+so one pull request can close them. That is the usual case for the Python floor above:
+pytest and other test tools are often what a project's `>=3.9` holds back.
 
 #### Poetry projects
 

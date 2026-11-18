@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **The fix plan checks whether raising `requires-python` unblocks the fixes that need a
+  newer Python** (uv projects). It raises the floor on the temporary copy, asks uv again,
+  and reports how many fixes and alerts that lets through and which Python versions it
+  drops. `--raise-python-floor` (Action: `fix-pr-raise-python-floor`) puts the
+  `requires-python` edit in the diff, `--apply` and the fix pull request; without it the
+  plan only reports the option, because dropping a Python version is the maintainer's
+  call. In `--json` as `fix_plan.python_floor`. Seen on real projects where Dependabot fails
+  repeatedly on pytest because the project still declares `>=3.9`.
+- **`--fix-filtered`** (Action: `fix-pr-include-filtered`): `--check-fixes` and `--fix-plan`
+  also cover filtered alerts (development-only, test-only, ...), which Dependabot keeps open
+  until the package moves. Off by default. Works for uv and Poetry plans.
 - **The fix plan names everything the verified lock moves**, not only the fixes: a parent
   that moves without a requirement change, added packages, and packages nothing requires any
   more. In the text output ("It also changes uv.lock"), the pull request description (`--fix-
@@ -16,6 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the lock also moved oaklib 0.7.4 → 0.7.5 and dropped six packages.
 
 ### Fixed
+- In a lock forked by Python version (a package locked twice, such as pytest 8.4.2 for 3.9
+  and 9.2.0 for 3.10+), the plan reported the newer copy as the installed version and missed
+  uv's `Update x v1, v2 -> v2` lines in its list of lock changes. It now reads the lower copy
+  (the one the alert is about) and those lines.
 - `--fix-plan FILE` says so when it writes no file: a plan that only moves the lockfile has
   no requirement diff, and the file silently did not appear.
 - A scanner error that ends in a Python traceback is reported by its last line

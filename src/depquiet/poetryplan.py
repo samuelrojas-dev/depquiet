@@ -341,9 +341,11 @@ def _plan_one(
     return final, moved
 
 
-def build_poetry_plan(result: ScanResult, project: Path, *, timeout: int = 600) -> FixPlan:
+def build_poetry_plan(
+    result: ScanResult, project: Path, *, timeout: int = 600, include_filtered: bool = False
+) -> FixPlan:
     """A verified fix plan for a Poetry project (see the module docstring)."""
-    if not fix_targets(result):
+    if not fix_targets(result, include_filtered=include_filtered):
         return FixPlan("none", note=NOTHING_TO_FIX, tool="poetry")
     executable = shutil.which("poetry")
     if executable is None:
@@ -355,7 +357,7 @@ def build_poetry_plan(result: ScanResult, project: Path, *, timeout: int = 600) 
     lock = _lock(project)
     targets = {
         package: version
-        for package, version in fix_targets(result).items()
+        for package, version in fix_targets(result, include_filtered=include_filtered).items()
         if _pep503(package) in lock and not _reaches(lock, package, version)
     }
     if not targets:
@@ -430,6 +432,7 @@ def build_poetry_plan(result: ScanResult, project: Path, *, timeout: int = 600) 
         ),
         tool="poetry",
         lock_changes=lock_changes,
+        include_filtered=include_filtered,
     )
     return plan
 
