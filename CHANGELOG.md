@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- A plan with nothing in it now says that the files asked for were not written
+  (`Nothing in the plan yet, so plan.diff and plan.md were not written.`) and, when raising
+  requires-python would let fixes in, to run again with `--raise-python-floor`. Found
+  following the README on a fresh install of 0.48.0: neither file appeared, and nothing said
+  why.
+
 ### Changed
 - The Action's name (its GitHub Marketplace title) is now "depquiet — Verified Dependency
   Fix Plans", in line with the README. The `uses: samuelrojas-dev/depquiet@v0` reference
