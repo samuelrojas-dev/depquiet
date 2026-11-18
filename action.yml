@@ -1,4 +1,4 @@
-name: "depquiet — Vulnerability Alert Triage"
+name: "depquiet — Verified Dependency Fix Plans"
 description: "Plan the change that closes your dependency alerts, verified with uv or Poetry, and drop alerts only dev tools reach."
 author: "Samuel Rojas"
 
