@@ -229,7 +229,21 @@ def _classify(check: FixCheck, text: str) -> None:
 def _run_lock(
     project: Path, executable: str, specs: list[str], timeout: int
 ) -> tuple[int, str, str] | str:
-    cmd = [executable, "lock", "--dry-run"]
+    """``uv lock --dry-run`` with the upgrades: writes nothing."""
+    return _lock(project, executable, specs, timeout, dry_run=True)
+
+
+def _write_lock(
+    project: Path, executable: str, specs: list[str], timeout: int
+) -> tuple[int, str, str] | str:
+    """``uv lock`` with the upgrades, written: only ever on a temporary copy."""
+    return _lock(project, executable, specs, timeout, dry_run=False)
+
+
+def _lock(
+    project: Path, executable: str, specs: list[str], timeout: int, *, dry_run: bool
+) -> tuple[int, str, str] | str:
+    cmd = [executable, "lock", *(["--dry-run"] if dry_run else [])]
     for spec in specs:
         cmd += ["--upgrade-package", spec]
     try:

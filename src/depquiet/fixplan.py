@@ -55,7 +55,7 @@ from datetime import UTC
 from pathlib import Path
 from typing import Any
 
-from depquiet.fixcheck import FixCheck, _explain, _pep503, _run_lock, fix_targets
+from depquiet.fixcheck import FixCheck, _explain, _pep503, _run_lock, _write_lock, fix_targets
 from depquiet.models import ScanResult, Verdict, clip, first_items, version_key
 
 _REQUIREMENT = re.compile(
@@ -167,6 +167,10 @@ class PythonFloor:
     dropped: str = ""  # "3.9", "3.8 and 3.9": the Python versions it stops supporting
     adopted: bool = False  # in the diff (--raise-python-floor)
     problem: str = ""  # why it could not be planned
+    # Set when the floor the fixes asked for left uv splitting the lock just above
+    # it, with older copies below the split: the floor the plan moved to instead.
+    refined_from: str = ""
+    avoids: list[str] = field(default_factory=list)  # the packages that split held back
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -177,6 +181,8 @@ class PythonFloor:
             "alerts_cleared": self.alerts,
             "adopted": self.adopted,
             "problem": self.problem or None,
+            "refined_from": f">={self.refined_from}" if self.refined_from else None,
+            "avoids_older": self.avoids,
             "edits": [e.__dict__ for e in self.edits],
         }
 
@@ -927,6 +933,8 @@ def dropped_pythons(old: str, new: str) -> str:
     if not (a[1].isdigit() and b[1].isdigit()):
         return ""
     minors = [f"3.{m}" for m in range(int(a[1]), int(b[1]))]
+    if any(p.isdigit() and int(p) for p in b[2:]):
+        minors.append(f"3.{b[1]} below {new}")
     if not minors:
         return ""
     return minors[0] if len(minors) == 1 else ", ".join(minors[:-1]) + " and " + minors[-1]
@@ -1031,6 +1039,13 @@ def _plan_python_floor(
                     item.why = (
                         f"still does not resolve with requires-python raised to >={floor}: {reason}"
                     )
+        if unblocked and local:
+            refined = _refine_floor(
+                project, root, executable, [*kept, *unblocked], floor, edits, local[0], timeout
+            )
+            if refined is not None:
+                option.refined_from = floor
+                option.floor, option.edits, option.dropped, local[0], option.avoids = refined
     option.unblocked = [i.package for i in unblocked]
     option.still_blocked = [i.package for i in waiting if i not in unblocked]
     keys = {_pep503(i.package) for i in unblocked}
@@ -1041,6 +1056,67 @@ def _plan_python_floor(
         and _pep503(r.vuln.package) in keys
     )
     return option, (local[0] if unblocked and local else "")
+
+
+_PYTHON_SPLIT = re.compile(r"python_(?:full_)?version\s*(?:<|>=)\s*'(\d+\.\d+(?:\.\d+)?)'")
+
+
+def _refine_floor(
+    project: Path,
+    root: Path,
+    executable: str,
+    items: list[PlanItem],
+    floor: str,
+    edits: list[PlanEdit],
+    report: str,
+    timeout: int,
+) -> tuple[str, list[PlanEdit], str, str, list[str]] | None:
+    """A slightly higher floor, when the one the fixes asked for still moves packages back.
+
+    On sparkgeo/prescient-sdk, ``>=3.11`` let every fix in, but uv split the
+    lock at 3.11.5 and gave Python 3.11.0-3.11.4 beautifulsoup4 4.6.3 (2018).
+    uv's split points are in the lock it writes, not in its dry-run report:
+    the lock is written on another temporary copy, and the splits above the
+    floor are tried, lowest first, until one resolves without a downgrade.
+    Returns (floor, edits, dropped, report, packages it keeps current), or None.
+    """
+    held = [c.package for c in _uv_lock_changes(report, items) if c.downgrade]
+    if not held:
+        return None
+    specs: list[str] = []
+    for item in items:
+        specs.append(f"{item.package}=={item.version}")
+        specs.extend(n for n in item.also_upgrade if n not in specs)
+    scratch = root.parent / "split-probe"
+    shutil.copytree(root, scratch, ignore=_COPY_IGNORE, symlinks=True)
+    try:
+        answer = _write_lock(scratch, executable, specs, timeout)
+        if isinstance(answer, str) or answer[0] != 0:
+            return None
+        lock_text = (scratch / "uv.lock").read_text(encoding="utf-8")
+    except OSError:
+        return None
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+    splits = sorted(
+        {v for v in _PYTHON_SPLIT.findall(lock_text) if version_key(v) > version_key(floor)},
+        key=version_key,
+    )
+    current = edits
+    for candidate in splits[:3]:
+        new_edits, dropped, problem = _floor_edits(project, candidate)
+        if problem:
+            continue
+        _revert(root, current)
+        _apply(root, new_edits)
+        out: list[str] = []
+        if _resolves(root, executable, items, timeout, out) is None and out:
+            still = [c for c in _uv_lock_changes(out[0], items) if c.downgrade]
+            if not still:
+                return candidate, new_edits, dropped, out[0], held
+        _revert(root, new_edits)
+        _apply(root, current)
+    return None
 
 
 # Shown when the project has no lockfile --fix-plan can work with.
@@ -1458,6 +1534,13 @@ def fix_plan_markdown(plan: FixPlan, result: ScanResult, version: str = "") -> s
             + " no longer supported: fine for an application, a breaking change for "
             "users of a published library.",
         ]
+        if floor.refined_from:
+            lines += [
+                "",
+                f"`>={floor.floor}` rather than `>={floor.refined_from}`: with "
+                f"`>={floor.refined_from}`, uv splits the lock at {floor.floor} and older "
+                f"Pythons get older {cell(first_items(floor.avoids, 4))}.",
+            ]
     if plan.left_out:
         lines += ["", "### Not included", ""]
         lines += [
@@ -1507,6 +1590,12 @@ def python_floor_lines(option: PythonFloor | None) -> list[str]:
         f"  It drops {drop}: fine for an application, a breaking change for users of a "
         "published library."
     )
+    if option.refined_from:
+        lines.append(
+            f"  >={option.floor}, not >={option.refined_from}: with >={option.refined_from}, uv "
+            f"splits the lock at {option.floor} and gives older Pythons older "
+            f"{first_items(option.avoids, 4)}."
+        )
     if option.still_blocked:
         lines.append(f"  Still blocked even then: {', '.join(option.still_blocked)}.")
     if not option.adopted:

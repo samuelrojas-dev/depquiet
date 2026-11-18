@@ -14,7 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   drops. `--raise-python-floor` (Action: `fix-pr-raise-python-floor`) puts the
   `requires-python` edit in the diff, `--apply` and the fix pull request; without it the
   plan only reports the option, because dropping a Python version is the maintainer's
-  call. In `--json` as `fix_plan.python_floor`. Seen on real projects where Dependabot fails
+  call. In `--json` as `fix_plan.python_floor`. When the floor the fixes ask for still
+  leaves uv splitting the lock just above it, with older packages below the split, the plan
+  moves to the exact floor: on sparkgeo/prescient-sdk, `>=3.11` gave Python 3.11.0–3.11.4
+  beautifulsoup4 4.6.3 (2018), and the plan proposes `>=3.11.5`, which keeps one
+  beautifulsoup4 (verified by hand in a disposable VM). The split points come from the lock
+  uv writes on a temporary copy; up to three are tried, lowest first. Seen on real projects where Dependabot fails
   repeatedly on pytest because the project still declares `>=3.9`.
 - **`--fix-filtered`** (Action: `fix-pr-include-filtered`): `--check-fixes` and `--fix-plan`
   also cover filtered alerts (development-only, test-only, ...), which Dependabot keeps open
