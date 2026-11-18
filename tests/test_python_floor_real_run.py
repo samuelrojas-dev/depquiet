@@ -12,8 +12,7 @@
 
 from __future__ import annotations
 
-import subprocess
-import sys
+import io
 from pathlib import Path
 
 import pytest
@@ -127,28 +126,37 @@ def test_wording(tmp_path, uv) -> None:
     assert "lets 2 fixes install" in lines and "more" not in lines
 
 
-def test_report_comes_before_the_plan_when_saved_to_one_file(tmp_path) -> None:
-    """The plan (stderr) used to print above the report (stdout) under ``> file 2>&1``."""
+class _FileLikeStdout(io.StringIO):
+    """stdout redirected to a file: held in a buffer until flushed into the shared file."""
+
+    def __init__(self, shared: io.StringIO) -> None:
+        super().__init__()
+        self.shared = shared
+
+    def isatty(self) -> bool:
+        return False
+
+    def flush(self) -> None:
+        self.shared.write(self.getvalue())
+        self.seek(0)
+        self.truncate()
+
+
+def test_report_comes_before_the_plan_when_saved_to_one_file(tmp_path, monkeypatch) -> None:
+    """The plan (stderr, unbuffered) printed above the report (stdout) under ``> f 2>&1``."""
+    from depquiet import cli
+
     (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\n', encoding="utf-8")
-    script = (
-        "import io, sys\n"
-        "from depquiet import cli\n"
-        "cli.check_fixes = lambda *a, **k: ({}, '')\n"
-        "cli.build_fix_plan = lambda *a, **k: cli.FixPlan('none', note='plan-note')\n"
-        'sys.stdin = io.StringIO(\'{"dependencies": [{"name": "a", "version": "1", '
-        '"vulns": [{"id": "PYSEC-1", "fix_versions": ["2"], "aliases": []}]}]}\')\n'
-        f"cli.main(['--stdin', '--scanner', 'pip', '--path', {str(tmp_path)!r}, '--fix-plan'])\n"
-    )
     (tmp_path / "uv.lock").write_text("version = 1\n", encoding="utf-8")
-    src = Path(__file__).resolve().parents[1] / "src"
-    out = subprocess.run(
-        [sys.executable, "-c", script],
-        capture_output=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        env={"PYTHONPATH": str(src), "PATH": "/usr/bin:/bin"},
-        check=False,
-    ).stdout
-    assert "Total:" in out and "Fix plan" in out
-    assert out.index("Total:") < out.index("Fix plan")
+    shared = io.StringIO()
+    stdout = _FileLikeStdout(shared)
+    monkeypatch.setattr("sys.stdin", io.StringIO('{"dependencies": []}'))
+    monkeypatch.setattr("sys.stdout", stdout)
+    monkeypatch.setattr("sys.stderr", shared)
+    monkeypatch.setattr(cli, "check_fixes", lambda *a, **k: ({}, ""))
+    monkeypatch.setattr(cli, "build_fix_plan", lambda *a, **k: fp.FixPlan("none", note="n"))
+    cli.main(["--stdin", "--scanner", "pip", "--path", str(tmp_path), "--fix-plan"])
+    stdout.flush()
+    out = shared.getvalue()
+    assert "No vulnerabilities found" in out and "Fix plan" in out
+    assert out.index("No vulnerabilities found") < out.index("Fix plan")
