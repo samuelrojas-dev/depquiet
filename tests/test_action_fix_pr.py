@@ -170,6 +170,20 @@ def test_run_step_raises_the_python_floor_only_when_asked(shell_env) -> None:  #
     _run_step("Run depquiet", shell_env)
     args = json.loads(Path(env["CALLS"]).read_text().splitlines()[0])
     assert "--raise-python-floor" in args and "--apply" in args
+    assert "--fix-filtered" not in args
+
+
+def test_run_step_fixes_filtered_alerts_only_when_asked(shell_env) -> None:  # noqa: F811
+    _, env = shell_env
+    env.update(
+        INPUT_FIX_PR="true",
+        INPUT_FIX_PR_INCLUDE_FILTERED="true",
+        GITHUB_EVENT_NAME="schedule",
+        SCAN_EXIT="0",
+    )
+    _run_step("Run depquiet", shell_env)
+    args = json.loads(Path(env["CALLS"]).read_text().splitlines()[0])
+    assert "--fix-filtered" in args
 
 
 def test_fix_pr_step_is_guarded() -> None:

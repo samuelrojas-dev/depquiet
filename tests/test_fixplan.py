@@ -223,7 +223,7 @@ def test_cli_writes_the_diff_to_the_file(tmp_path, monkeypatch, capsys) -> None:
     from depquiet import cli
 
     plan = fp.FixPlan("verified", diff="--- a/pyproject.toml\n+++ b/pyproject.toml\n")
-    monkeypatch.setattr(cli, "check_fixes", lambda result, path: ({}, ""))
+    monkeypatch.setattr(cli, "check_fixes", lambda result, path, **k: ({}, ""))
     monkeypatch.setattr(cli, "build_fix_plan", lambda *a, **k: plan)
     out = tmp_path / "plan.diff"
     _cli(tmp_path, monkeypatch, "--fix-plan", str(out))

@@ -280,7 +280,7 @@ def test_cli_passes_the_flag(tmp_path, monkeypatch) -> None:
     (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\n', encoding="utf-8")
     (tmp_path / "uv.lock").write_text("version = 1\n", encoding="utf-8")
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"dependencies": []})))
-    monkeypatch.setattr(cli, "check_fixes", lambda result, path: ({}, ""))
+    monkeypatch.setattr(cli, "check_fixes", lambda result, path, **k: ({}, ""))
     monkeypatch.setattr(
         cli,
         "build_fix_plan",
@@ -306,3 +306,51 @@ def test_workspace_members_with_a_lower_floor_are_raised_too(tmp_path) -> None:
         ("packages/lib/pyproject.toml", ">=3.10,<4"),
         ("pyproject.toml", ">=3.10"),
     ]
+
+
+# --- filtered alerts (--fix-filtered) -------------------------------------------
+#
+# On both real projects that motivated the Python floor plan, pytest is a
+# development dependency: depquiet filters its alert, so without --fix-filtered
+# the plan never sees it, while Dependabot keeps it open.
+
+
+def _filtered_result() -> ScanResult:
+    result = _result()
+    result.results[0].verdict = Verdict.FILTERED  # pytest: development only
+    return result
+
+
+def test_filtered_alerts_are_left_out_of_the_plan_by_default(tmp_path, uv) -> None:
+    plan = build_fix_plan(_filtered_result(), _project(tmp_path), _checks())
+    assert [i.package for i in plan.items] == ["tornado"] and plan.python_floor is None
+
+
+def test_fix_filtered_plans_them_too(tmp_path, uv) -> None:
+    result = _filtered_result()
+    plan = build_fix_plan(
+        result,
+        _project(tmp_path),
+        _checks(),
+        raise_python_floor=True,
+        include_filtered=True,
+    )
+    assert plan.status == "verified" and plan.python_floor and plan.python_floor.alerts == 1
+    assert "PYSEC-pytest" in fp.fix_plan_markdown(plan, result)
+
+
+def test_fix_targets_with_filtered() -> None:
+    from depquiet.fixcheck import fix_targets
+
+    assert fix_targets(_filtered_result()) == {"tornado": "6.5"}
+    assert fix_targets(_filtered_result(), include_filtered=True) == {
+        "pytest": "9.0.0",
+        "tornado": "6.5",
+    }
+
+
+def test_cli_fix_filtered_needs_a_fix_flag(tmp_path, capsys) -> None:
+    from depquiet.cli import main
+
+    assert main(["--path", str(tmp_path), "--fix-filtered"]) == 2
+    assert "--fix-filtered needs --check-fixes or --fix-plan" in capsys.readouterr().err

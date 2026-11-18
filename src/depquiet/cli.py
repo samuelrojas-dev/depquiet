@@ -620,6 +620,13 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
         "or uv.toml, then run uv lock). If uv lock fails, every file is put back as it was",
     )
     parser.add_argument(
+        "--fix-filtered",
+        action="store_true",
+        help="With --check-fixes or --fix-plan: also check and plan the fixes of filtered "
+        "alerts (development-only, test-only, ...). depquiet says they need no action, but "
+        "Dependabot and other scanners keep them open until the package moves",
+    )
+    parser.add_argument(
         "--raise-python-floor",
         action="store_true",
         help="With --fix-plan (uv projects): when a fix needs a newer Python than the "
@@ -720,6 +727,9 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
         if given and args.fix_plan is None:
             print(f"Error: {flag} needs --fix-plan.", file=sys.stderr)
             return 2
+    if args.fix_filtered and not (args.check_fixes or args.fix_plan is not None):
+        print("Error: --fix-filtered needs --check-fixes or --fix-plan.", file=sys.stderr)
+        return 2
     if not args.path.exists():
         print(f"Error: --path {args.path}: no such directory.", file=sys.stderr)
         return 2
@@ -925,7 +935,7 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
         elif is_poetry_project(args.path):
             # Poetry has no per-fix dry run to report on: the plan is the check.
             if args.fix_plan is not None:
-                fix_plan = build_poetry_plan(result, args.path)
+                fix_plan = build_poetry_plan(result, args.path, include_filtered=args.fix_filtered)
                 if args.raise_python_floor:
                     warnings.append(
                         "depquiet: --raise-python-floor works on uv projects for now; "
@@ -937,14 +947,18 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
                     "--fix-plan, which verifies the fixes with Poetry's resolver."
                 )
         else:
-            checks, check_note = check_fixes(result, args.path)
+            checks, check_note = check_fixes(result, args.path, include_filtered=args.fix_filtered)
             if check_note and args.fix_plan is not None and not (args.path / "uv.lock").exists():
                 check_note = FIX_PLAN_UNSUPPORTED  # --fix-plan also covers Poetry
             if check_note:
                 warnings.append(f"depquiet: {check_note.replace('--check-fixes', flag)}")
             elif args.fix_plan is not None:
                 fix_plan = build_fix_plan(
-                    result, args.path, checks, raise_python_floor=args.raise_python_floor
+                    result,
+                    args.path,
+                    checks,
+                    raise_python_floor=args.raise_python_floor,
+                    include_filtered=args.fix_filtered,
                 )
 
     # Compute license data before serializing so --json emits one document.

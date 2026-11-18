@@ -667,6 +667,14 @@ it back down. Workspace members whose own floor is lower are raised too. uv proj
 for now; on Poetry the `python` constraint is left as it is. The Action's input is
 `fix-pr-raise-python-floor`.
 
+#### Fixing filtered alerts too (`--fix-filtered`)
+
+The plan covers the alerts depquiet shows. A filtered alert (pytest in a `dev` group, say)
+needs no action by depquiet's reading, but Dependabot keeps it open until the package moves.
+`--fix-filtered` (Action: `fix-pr-include-filtered`) checks and plans those fixes as well,
+so one pull request can close them. That is the usual case for the Python floor above:
+pytest and other test tools are often what a project's `>=3.9` holds back.
+
 #### Poetry projects
 
 `--fix-plan`, `--apply` and `fix-pr` work on Poetry projects too (a `poetry.lock` and no

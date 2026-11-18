@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   plan only reports the option, because dropping a Python version is the maintainer's
   call. In `--json` as `fix_plan.python_floor`. Seen on real projects where Dependabot fails
   repeatedly on pytest because the project still declares `>=3.9`.
+- **`--fix-filtered`** (Action: `fix-pr-include-filtered`): `--check-fixes` and `--fix-plan`
+  also cover filtered alerts (development-only, test-only, ...), which Dependabot keeps open
+  until the package moves. Off by default. Works for uv and Poetry plans.
 - **The fix plan names everything the verified lock moves**, not only the fixes: a parent
   that moves without a requirement change, added packages, and packages nothing requires any
   more. In the text output ("It also changes uv.lock"), the pull request description (`--fix-

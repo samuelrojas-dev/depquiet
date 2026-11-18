@@ -176,6 +176,8 @@ class FixPlan:
     # lockfile diff, so the plan names them.
     lock_changes: list[LockChange] = field(default_factory=list)
     python_floor: PythonFloor | None = None
+    # Planned for filtered alerts too (--fix-filtered): the report lists them.
+    include_filtered: bool = False
 
     @property
     def edits(self) -> list[PlanEdit]:
@@ -942,6 +944,7 @@ def _plan_python_floor(
     floors: dict[str, str],
     result: ScanResult,
     timeout: int,
+    include_filtered: bool = False,
 ) -> tuple[PythonFloor, str]:
     """Check, on a copy, which fixes install once requires-python is raised.
 
@@ -982,7 +985,8 @@ def _plan_python_floor(
     option.alerts = sum(
         1
         for r in result.results
-        if r.verdict is not Verdict.FILTERED and _pep503(r.vuln.package) in keys
+        if (include_filtered or r.verdict is not Verdict.FILTERED)
+        and _pep503(r.vuln.package) in keys
     )
     return option, (local[0] if unblocked and local else "")
 
@@ -1004,12 +1008,13 @@ def build_fix_plan(
     *,
     timeout: int = 300,
     raise_python_floor: bool = False,
+    include_filtered: bool = False,
 ) -> FixPlan:
     # The project first: fix_targets counts Python alerts only, so on an npm
     # project "nothing to fix" would be false.
     if not (project / "uv.lock").is_file():
         return FixPlan("unsupported", note=UNSUPPORTED_NOTE)
-    targets = fix_targets(result)
+    targets = fix_targets(result, include_filtered=include_filtered)
     if not targets:
         return FixPlan("none", note=NOTHING_TO_FIX)
     found = shutil.which("uv")
@@ -1071,7 +1076,7 @@ def build_fix_plan(
     if waiting:
         kept = [i for i in candidates if i.included]
         option, floor_report = _plan_python_floor(
-            project, executable, kept, waiting, floors, result, timeout
+            project, executable, kept, waiting, floors, result, timeout, include_filtered
         )
         unblocked = [i for i in waiting if i.package in option.unblocked]
         for item in unblocked:
@@ -1112,7 +1117,14 @@ def build_fix_plan(
             f" The plan raises requires-python to >={option.floor}: users on older Python "
             "versions can no longer install the project."
         )
-    plan = FixPlan(status, items=items, diff=diff, note=note, python_floor=option)
+    plan = FixPlan(
+        status,
+        items=items,
+        diff=diff,
+        note=note,
+        python_floor=option,
+        include_filtered=include_filtered,
+    )
     if included and report:
         plan.lock_changes = _uv_lock_changes(report[0], included)
     return plan
@@ -1285,7 +1297,7 @@ def fix_plan_markdown(plan: FixPlan, result: ScanResult, version: str = "") -> s
 
     advisories: dict[str, list[str]] = {}
     for r in result.results:
-        if r.verdict is not Verdict.FILTERED:
+        if plan.include_filtered or r.verdict is not Verdict.FILTERED:
             known = advisories.setdefault(_pep503(r.vuln.package), [])
             if r.vuln.cve not in known:
                 known.append(r.vuln.cve)
