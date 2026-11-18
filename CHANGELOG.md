@@ -27,6 +27,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the lock also moved oaklib 0.7.4 → 0.7.5 and dropped six packages.
 
 ### Fixed
+- A fix the plan could not ask for is counted when the verified lock moves its package past
+  the fix anyway. On sparkgeo/prescient-sdk the plan listed `jupyterlab → 4.5.11` as not
+  included while the same lock moved jupyterlab 4.5.7 → 4.6.6. It now shows "moves past the
+  fix with the rest of the plan", and the command stays the one that was verified. A fix
+  retried with a raised Python floor that still fails gives that reason, not the old one.
 - Found on the first real run of the Python floor plan (sparkgeo/prescient-sdk):
   - a fix that uv says "only supports >3.9.0" (cryptography, which excludes 3.9.0 itself)
     was not read as a Python floor and was left out, although the plan already raised the

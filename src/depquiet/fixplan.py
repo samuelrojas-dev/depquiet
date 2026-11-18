@@ -110,6 +110,8 @@ class PlanItem:
     expires: str = ""  # when a rolling cooldown admits the fix by itself
     python_floor: str = ""  # set when the plan raises requires-python for it
     fixed_in: str = ""  # the advisory's fix, when ``version`` is a newer release already locked
+    # Not asked for, but the verified lock moves it past the fix anyway.
+    carried: bool = False
 
     @property
     def major_jump(self) -> bool:
@@ -205,7 +207,8 @@ class FixPlan:
                         names.append(name)
             return "poetry update --lock " + " ".join(names) if names else ""
         specs: list[str] = []
-        for item in self.included:
+        # A carried fix needs no flag of its own: the command that was verified moves it.
+        for item in (i for i in self.included if not i.carried):
             specs.append(f"{item.package}=={item.version}")
             specs.extend(n for n in item.also_upgrade if n not in specs)
         return "uv lock " + " ".join(f"--upgrade-package {s}" for s in specs) if specs else ""
@@ -222,6 +225,7 @@ class FixPlan:
                     "package": i.package,
                     "version": i.version,
                     "fixed_in": i.fixed_in or None,
+                    "carried": i.carried,
                     "installed": i.installed,
                     "major_version_change": i.major_jump,
                     "also_upgrade": i.also_upgrade,
@@ -986,6 +990,10 @@ def _plan_python_floor(
                         f"needs Python >={floors[item.package]}, and with requires-python "
                         f"raised to >={floor} it still does not resolve: {reason}"
                     )
+                else:
+                    item.why = (
+                        f"still does not resolve with requires-python raised to >={floor}: {reason}"
+                    )
     option.unblocked = [i.package for i in unblocked]
     option.still_blocked = [i.package for i in waiting if i not in unblocked]
     keys = {_pep503(i.package) for i in unblocked}
@@ -1117,6 +1125,8 @@ def build_fix_plan(
             option.adopted = True
             report[:] = [floor_report]
 
+    if report:
+        _count_carried(items, report[0])
     included = [i for i in items if i.included]
     edits = [e for i in included for e in i.edits]
     if option is not None and option.adopted:
@@ -1152,6 +1162,39 @@ def build_fix_plan(
     if included and report:
         plan.lock_changes = _uv_lock_changes(report[0], included)
     return plan
+
+
+def _final_versions(report: str) -> dict[str, list[str]]:
+    """Package -> every version it ends at, from uv's Update/Add lines."""
+    found: dict[str, list[str]] = {}
+    for line in report.splitlines():
+        match = re.match(r"^\s*(Update|Add)\s+([A-Za-z0-9][A-Za-z0-9._-]*)\s+(.*)$", line)
+        if not match:
+            continue
+        tail = match.group(3).split("->")[-1]
+        versions = re.findall(r"v([0-9][^\s,]*)", tail)
+        if versions:
+            found[_pep503(match.group(2))] = versions
+    return found
+
+
+def _count_carried(items: list[PlanItem], report: str) -> None:
+    """A fix left out can still land: the verified lock may move its package past it.
+
+    On sparkgeo/prescient-sdk, ``jupyterlab==4.5.11`` did not resolve with the
+    rest, while the same verified lock moved jupyterlab 4.5.7 → 4.6.6. The
+    alert closes, so the plan counts it, at the version the lock reaches.
+    """
+    final = _final_versions(report)
+    for item in items:
+        if item.included:
+            continue
+        versions = final.get(_pep503(item.package), [])
+        if versions and all(version_key(v) >= version_key(item.version) for v in versions):
+            reached = max(versions, key=version_key)
+            item.fixed_in = item.fixed_in or (item.version if reached != item.version else "")
+            item.version = reached
+            item.included, item.carried, item.why = True, True, ""
 
 
 def _verify_candidates(
@@ -1290,6 +1333,8 @@ def apply_fix_plan(plan: FixPlan, project: Path, *, timeout: int = 900) -> str:
 
 def _how(item: PlanItem) -> str:
     own = [e for e in item.edits if _pep503(e.package) == _pep503(item.package)]
+    if item.carried:
+        return "moves past the fix with the rest of the plan"
     if item.python_floor:
         return f"raises `requires-python` to `>={item.python_floor}`, which the fix needs"
     if item.published:
@@ -1437,7 +1482,9 @@ def print_fix_plan(plan: FixPlan, file: Any) -> None:
     for item in plan.included:
         jump = "  (major version change)" if item.major_jump else ""
         own = [e for e in item.edits if _pep503(e.package) == _pep503(item.package)]
-        if item.python_floor:
+        if item.carried:
+            how = "moves past the fix with the rest of the plan"
+        elif item.python_floor:
             how = f"raise requires-python to >={item.python_floor}, which the fix needs"
         elif item.published:
             how = (
@@ -1457,7 +1504,13 @@ def print_fix_plan(plan: FixPlan, file: Any) -> None:
             f"   ✓ {item.package} {item.installed or '?'} → {item.version}: {how}{jump}",
             file=file,
         )
-        if item.fixed_in:
+        if item.carried:
+            print(
+                f"     (asking for {item.fixed_in or item.version} itself did not resolve; "
+                f"the verified lock takes it to {item.version}, past the fix)",
+                file=file,
+            )
+        elif item.fixed_in:
             print(
                 f"     (fixed in {item.fixed_in}; {item.version} is already in your lock "
                 "for newer Pythons, so that copy is not moved back)",
