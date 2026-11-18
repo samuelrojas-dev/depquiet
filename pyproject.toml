@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "depquiet"
 version = "0.47.6"
-description = "Tells you which dependency alerts never reach production, with proof from your lockfile. pip-audit, uv audit, npm, pnpm, Yarn."
+description = "Tells you what to change to close your dependency alerts, verified with your resolver, and which alerts never reach production. uv, Poetry, pip-audit, npm, pnpm, Yarn."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"

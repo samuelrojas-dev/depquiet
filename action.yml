@@ -1,5 +1,5 @@
 name: "depquiet — Vulnerability Alert Triage"
-description: "Triage pip-audit, uv audit and npm audit alerts: drop those that only reach dev tooling, and check if each fix installs."
+description: "Plan the change that closes your dependency alerts, verified with uv or Poetry, and drop alerts only dev tools reach."
 author: "Samuel Rojas"
 
 branding:
