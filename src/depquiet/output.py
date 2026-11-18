@@ -18,6 +18,7 @@ from depquiet.models import (
     first_items,
     is_prerelease,
     short_title,
+    version_key,
 )
 
 # ANSI colors — disabled when not a TTY
@@ -59,8 +60,13 @@ def _c(code: str, text: str) -> str:
     return f"{code}{text}{_RESET}"
 
 
-def print_scan_result(result: ScanResult) -> None:
-    """Print the full triage result to stdout."""
+def print_scan_result(result: ScanResult, *, plan_follows: bool = False) -> None:
+    """Print the full triage result to stdout.
+
+    ``plan_follows``: a fix plan is printed after the report. Each alert's
+    fix check would repeat it, three or four lines per alert above the plan
+    the user asked for, so the list gets one summary line instead.
+    """
     if not result.scanned:
         print(f"\n{_c(_YELLOW, '⚠️')}  Nothing scanned: {result.note}")
         return
@@ -124,7 +130,11 @@ def print_scan_result(result: ScanResult) -> None:
             )
 
     # Action required
-    if action:
+    if action and plan_follows:
+        print()
+        print(f"{_c(_RED, '🔴')} {_c(_BOLD, 'ACTION REQUIRED: ' + _count(len(action), 'alert'))}")
+        _print_by_package(action)
+    elif action:
         print()
         print(f"{_c(_RED, '🔴')} {_c(_BOLD, 'ACTION REQUIRED: ' + _count(len(action), 'alert'))}")
         for r in action:
@@ -174,6 +184,47 @@ def print_scan_result(result: ScanResult) -> None:
         "not from whether your code calls the vulnerable function."
     )
     print()
+
+
+def _print_by_package(action: list[Any]) -> None:
+    """The alerts grouped by package, most urgent first: the shape of the fix plan.
+
+    One upgrade per package clears all its alerts, so twenty tornado alerts
+    are one line of the plan; listed one by one they pushed it off the screen.
+    """
+    groups: dict[str, list[Any]] = {}
+    for r in action:
+        groups.setdefault(r.vuln.package, []).append(r)
+    for package, rows in groups.items():
+        ids = [r.vuln.cve for r in rows]
+        fixes = [r.vuln.fix_version for r in rows if r.vuln.fix_version]
+        highest = max(fixes, key=version_key) if fixes else ""
+        fix_str = f"  FIX: update to {highest}" if highest else ""
+        noun = _count(len(rows), "alert")
+        kev = [r.vuln.cve for r in rows if getattr(r, "kev_entry", None) is not None]
+        kev_str = f"  {_c(_RED, 'KNOWN EXPLOITED: ' + ', '.join(kev))}" if kev else ""
+        print(f"   {_c(_RED, '•')} {package}  {noun}{fix_str}{kev_str}")
+        print(f"     {_c(_DIM, first_items(ids, 4))}")
+        imports = rows[0].reachable_imports
+        if imports:
+            more = f" and {len(imports) - 2} more" if len(imports) > 2 else ""
+            print(f"     {_c(_DIM, '→')} {', '.join(imports[:2])}{more}")
+    _print_check_summary(action)
+
+
+def _print_check_summary(action: list[Any]) -> None:
+    """One line in place of every alert's fix check, when the plan follows."""
+    checks = [r.fix_check for r in action if r.fix_check is not None]
+    if not checks:
+        return
+    resolves = sum(1 for c in checks if c.status == "resolves")
+    blocked = len(checks) - resolves
+    parts = [f"{resolves} resolve on their own"] if resolves else []
+    if blocked:
+        parts.append(f"{blocked} blocked")
+    alerts = _count(len(checks), "alert")
+    line = f"Fix checks for {alerts}: {', '.join(parts)}. The fix plan below puts them together."
+    print(f"\n   {_c(_DIM, line)}")
 
 
 def _print_fix_check(check: Any) -> None:
