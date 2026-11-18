@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- The Action's name (its GitHub Marketplace title) is now "depquiet — Verified Dependency
+  Fix Plans", in line with the README. The `uses: samuelrojas-dev/depquiet@v0` reference
+  does not change.
+
 ## [0.48.0] - 2026-11-18
 
 ### Changed
