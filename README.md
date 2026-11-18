@@ -9,12 +9,10 @@
 **Tells you what to change to close your dependency alerts, verified with your project's own
 resolver, and which alerts never reach production.**
 
-Scanners and Dependabot say "update X to 1.2.3". On a real project that is often not
-enough: your own pin blocks it, another package holds it back, the fix needs a newer Python
-than your `requires-python`, or the only lock that fits quietly moves something else back
-to a years-old release. For uv and Poetry projects, `depquiet --fix-plan` works out the
-change that closes the alerts, checks it with the resolver on a copy of the project, and
-says what else it moves:
+Sometimes a Dependabot update gets stuck because one line in `pyproject.toml` still asks for
+the old version. depquiet tries the update on a copy of your project with uv or Poetry and
+shows you what needs to change. If fixing one package means rolling another one back,
+you'll see that too.
 
 ```bash
 pip install depquiet pip-audit
