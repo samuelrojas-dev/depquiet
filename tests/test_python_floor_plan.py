@@ -168,6 +168,8 @@ def uv(monkeypatch):
         calls.append((text, list(specs)))
         if any(s.startswith("pytest==") for s in specs) and '">=3.9"' in text:
             return 1, "", UV_FLOOR_ERROR
+        if '">=3.9"' in text:  # like uv: without the raised floor, pytest does not move
+            return 0, "Update tornado v6.4.1 -> v6.5\n", ""
         return 0, UV_RAISED_REPORT, ""
 
     monkeypatch.setattr(fp.shutil, "which", lambda name: "/usr/bin/uv")
