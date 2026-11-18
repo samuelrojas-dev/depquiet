@@ -123,13 +123,26 @@ class LockChange:
     """A package the plan moves in the lockfile besides the fixes themselves."""
 
     package: str
-    old: str  # "" when the plan adds it
+    old: str  # "" when the plan adds it; "1.0, 2.0" in a lock forked by Python version
     new: str  # "" when the plan removes it
 
     @property
+    def downgrade(self) -> bool:
+        """Some copy ends older than every copy before: uv went back to fit the fixes.
+
+        On sparkgeo/prescient-sdk, keeping Python 3.9 took jupyterlab from 4.5.7 to
+        2.3.2 (for 3.9) and 4.x (for newer Pythons): the plan must say so.
+        """
+        if not self.old or not self.new:
+            return False
+        olds = [v.strip() for v in self.old.split(",") if v.strip()]
+        lowest = min(olds, key=version_key)
+        return any(version_key(v.strip()) < version_key(lowest) for v in self.new.split(","))
+
+    @property
     def order(self) -> tuple[int, str]:
-        """Moves first (a parent that has to move matters most), then additions, removals."""
-        kind = 2 if not self.new else 1 if not self.old else 0
+        """Downgrades first, then moves (a parent that has to move), additions, removals."""
+        kind = 3 if not self.new else 2 if not self.old else 0 if self.downgrade else 1
         return kind, self.package.lower()
 
     def describe(self) -> str:
@@ -137,6 +150,8 @@ class LockChange:
             return f"{self.package} {self.new} (added)"
         if not self.new:
             return f"{self.package} {self.old} (removed: nothing requires it any more)"
+        if self.downgrade:
+            return f"⚠ {self.package} {self.old} → {self.new} (an older version)"
         return f"{self.package} {self.old} → {self.new}"
 
 
@@ -178,6 +193,28 @@ class FixPlan:
     # lockfile diff, so the plan names them.
     lock_changes: list[LockChange] = field(default_factory=list)
     python_floor: PythonFloor | None = None
+
+    @property
+    def downgrades(self) -> list[LockChange]:
+        return [c for c in self.lock_changes if c.downgrade]
+
+    def downgrade_warning(self) -> str:
+        """One sentence for a plan that moves packages back, "" when it does not."""
+        names = [c.package for c in self.downgrades]
+        if not names:
+            return ""
+        text = (
+            f"The lock moves {first_items(names, 4)} to an older version to fit the fixes "
+            "together: check that before merging."
+        )
+        floor = self.python_floor
+        if floor is not None and not floor.adopted and floor.unblocked:
+            text += (
+                " In a lock forked by Python version this is usually the copy for the oldest "
+                "Python you support; raising requires-python (see Python floor) may avoid it."
+            )
+        return text
+
     # Planned for filtered alerts too (--fix-filtered): the report lists them.
     include_filtered: bool = False
 
@@ -1229,7 +1266,7 @@ def _verify_candidates(
 # A lock forked by Python version lists each locked version: ``Update x v1.0, v2.0 -> v2.0``.
 _LOCK_LINE = re.compile(
     r"^\s*(Update|Add|Remove)\s+([A-Za-z0-9][A-Za-z0-9._-]*)\s+(v[^\s,]+(?:,\s*v[^\s,]+)*)"
-    r"(?:\s+->\s+v(\S+))?",
+    r"(?:\s+->\s+(v[^\s,]+(?:,\s*v[^\s,]+)*))?",
     re.M,
 )
 
@@ -1244,7 +1281,8 @@ def _uv_lock_changes(report: str, included: list[PlanItem]) -> list[LockChange]:
             continue
         first = ", ".join(v.strip()[1:] for v in versions.split(","))
         if verb == "Update":
-            changes.append(LockChange(name, first, second))
+            last = ", ".join(v.strip()[1:] for v in second.split(",") if v.strip())
+            changes.append(LockChange(name, first, last))
         elif verb == "Add":
             changes.append(LockChange(name, "", first))
         else:
@@ -1404,6 +1442,8 @@ def fix_plan_markdown(plan: FixPlan, result: ScanResult, version: str = "") -> s
         lockfile = "poetry.lock" if plan.tool == "poetry" else "uv.lock"
         lines += ["", f"### Other changes in `{lockfile}`", ""]
         lines += [f"- {cell(c.describe())}" for c in plan.lock_changes]
+        if plan.downgrade_warning():
+            lines += ["", f"**{plan.downgrade_warning()}**"]
     floor = plan.python_floor
     if floor is not None and floor.adopted:
         lines += [
@@ -1430,6 +1470,7 @@ def fix_plan_markdown(plan: FixPlan, result: ScanResult, version: str = "") -> s
         "### Before merging",
         "",
         "- " + plan.note,
+        *(["- " + plan.downgrade_warning()] if plan.downgrade_warning() else []),
         "- depquiet checked that the versions resolve, not that your code works with them: "
         "let your tests decide.",
         "",
@@ -1527,6 +1568,8 @@ def print_fix_plan(plan: FixPlan, file: Any) -> None:
         print(f"\n   It also changes {lockfile}:", file=file)
         for change in plan.lock_changes:
             print(f"     · {change.describe()}", file=file)
+        if plan.downgrade_warning():
+            print(f"   {plan.downgrade_warning()}", file=file)
     for line in python_floor_lines(plan.python_floor):
         print(f"   {line}" if line else "", file=file)
     if plan.included:
