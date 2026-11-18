@@ -487,6 +487,7 @@ def main(argv: list[str] | None = None) -> int:
   depquiet --check-fixes            uv: can each fix be installed, and what blocks it
   depquiet --fix-plan plan.diff     uv, Poetry: one verified pyproject.toml change for all fixes
   depquiet --fix-plan --apply       uv, Poetry: apply that change and relock (restored on failure)
+  depquiet --fix-plan --raise-python-floor  uv: also raise requires-python when a fix needs it
   depquiet --fail-on high           fail CI on high or critical ACTION alerts
 
 other commands:
@@ -619,6 +620,14 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
         "or uv.toml, then run uv lock). If uv lock fails, every file is put back as it was",
     )
     parser.add_argument(
+        "--raise-python-floor",
+        action="store_true",
+        help="With --fix-plan (uv projects): when a fix needs a newer Python than the "
+        "project's requires-python, raise requires-python in the plan to what the fix needs "
+        "(verified with uv's resolver). Without it, the plan only reports that option. "
+        "Drops support for the older Python versions",
+    )
+    parser.add_argument(
         "--fix-plan-report",
         type=Path,
         default=None,
@@ -703,7 +712,11 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
     args = parser.parse_args(argv)
 
     # Flag combinations that cannot work are refused before any scan runs.
-    for flag, given in (("--apply", args.apply), ("--fix-plan-report", args.fix_plan_report)):
+    for flag, given in (
+        ("--apply", args.apply),
+        ("--fix-plan-report", args.fix_plan_report),
+        ("--raise-python-floor", args.raise_python_floor),
+    ):
         if given and args.fix_plan is None:
             print(f"Error: {flag} needs --fix-plan.", file=sys.stderr)
             return 2
@@ -913,6 +926,11 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
             # Poetry has no per-fix dry run to report on: the plan is the check.
             if args.fix_plan is not None:
                 fix_plan = build_poetry_plan(result, args.path)
+                if args.raise_python_floor:
+                    warnings.append(
+                        "depquiet: --raise-python-floor works on uv projects for now; "
+                        "the Poetry plan leaves the Python constraint as it is."
+                    )
             else:
                 warnings.append(
                     "depquiet: --check-fixes works on uv projects; for a Poetry project use "
@@ -925,7 +943,9 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
             if check_note:
                 warnings.append(f"depquiet: {check_note.replace('--check-fixes', flag)}")
             elif args.fix_plan is not None:
-                fix_plan = build_fix_plan(result, args.path, checks)
+                fix_plan = build_fix_plan(
+                    result, args.path, checks, raise_python_floor=args.raise_python_floor
+                )
 
     # Compute license data before serializing so --json emits one document.
     license_report = None

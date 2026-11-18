@@ -156,6 +156,20 @@ def test_run_step_applies_the_plan_on_a_schedule(shell_env) -> None:  # noqa: F8
     args = json.loads(Path(env["CALLS"]).read_text().splitlines()[0])
     assert "--apply" in args and "--fix-plan-report" in args
     assert _outputs(env)["fix_report"].endswith("fix-pr.md")
+    assert "--raise-python-floor" not in args
+
+
+def test_run_step_raises_the_python_floor_only_when_asked(shell_env) -> None:  # noqa: F811
+    _, env = shell_env
+    env.update(
+        INPUT_FIX_PR="true",
+        INPUT_FIX_PR_RAISE_PYTHON_FLOOR="true",
+        GITHUB_EVENT_NAME="schedule",
+        SCAN_EXIT="0",
+    )
+    _run_step("Run depquiet", shell_env)
+    args = json.loads(Path(env["CALLS"]).read_text().splitlines()[0])
+    assert "--raise-python-floor" in args and "--apply" in args
 
 
 def test_fix_pr_step_is_guarded() -> None:

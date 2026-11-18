@@ -111,6 +111,10 @@ inputs:
     description: "uv and Poetry projects: open (or update) one pull request with every fix that the project's resolver confirms installs together: requirement changes in pyproject.toml/uv.toml plus the lock file (true/false). Skipped on pull_request events. Needs contents: write and pull-requests: write. Runs uv lock or poetry update --lock: trusted code only."
     required: false
     default: "false"
+  fix-pr-raise-python-floor:
+    description: "With fix-pr on a uv project: when a fix needs a newer Python than requires-python, raise requires-python in the pull request to what the fix needs (true/false). Drops support for the older Python versions: fine for an application, a breaking change for a published library. Without it, the pull request lists those fixes under Not included."
+    required: false
+    default: "false"
   fix-pr-branch:
     description: "Branch for the fix pull request. It is force-pushed on every run: do not commit to it by hand."
     required: false
@@ -212,6 +216,7 @@ runs:
         INPUT_VEX: ${{ inputs.vex }}
         INPUT_CHECK_FIXES: ${{ inputs.check-fixes }}
         INPUT_FIX_PR: ${{ inputs.fix-pr }}
+        INPUT_FIX_PR_RAISE_PYTHON_FLOOR: ${{ inputs.fix-pr-raise-python-floor }}
       run: |
         SCAN_DIR=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/depquiet.XXXXXX")
         SCAN_FILE="$SCAN_DIR/scan.json"
@@ -305,6 +310,9 @@ runs:
               ;;
             *)
               ARGS+=(--fix-plan "$SCAN_DIR/fix-plan.diff" --apply --fix-plan-report "$SCAN_DIR/fix-pr.md")
+              if [ "$INPUT_FIX_PR_RAISE_PYTHON_FLOOR" = "true" ]; then
+                ARGS+=(--raise-python-floor)
+              fi
               echo "fix_report=$SCAN_DIR/fix-pr.md" >> "$GITHUB_OUTPUT"
               ;;
           esac

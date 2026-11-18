@@ -48,6 +48,8 @@ class FixCheck:
     also_upgrade: list[str] = field(default_factory=list)
     # ``name vOLD -> vNEW`` for every package that changes when it resolves.
     updates: list[str] = field(default_factory=list)
+    # The lowest Python the fix supports ("3.11"), when that is what blocks it.
+    python_floor: str = ""
 
     @property
     def command(self) -> str:
@@ -65,6 +67,7 @@ class FixCheck:
             "next_step": self.next_step,
             "also_upgrade": self.also_upgrade,
             "updates": self.updates,
+            "python_floor": self.python_floor or None,
         }
 
 
@@ -122,7 +125,8 @@ _NAME = r"[A-Za-z0-9][A-Za-z0-9_.\-]*"
 _EXTRA = r"(?:\[[^\]]*\])?"
 _MARKER = r"(?:\{[^}]*\})?"
 _SPEC = r"(?:==|>=|<=|!=|~=|<|>)[^\s,]*(?:,(?:==|>=|<=|!=|~=|<|>)[^\s,]*)*"
-_UPDATE = re.compile(rf"Update ({_NAME}) (v\S+ -> v\S+)", re.I)
+# A lock forked by Python version lists every locked version: ``v8.4.2, v9.2.0 -> v9.2.0``.
+_UPDATE = re.compile(rf"Update ({_NAME}) (v[^\s,]+(?:, v[^\s,]+)* -> v\S+)", re.I)
 
 
 def _pep503(name: str) -> str:
@@ -182,10 +186,14 @@ def _classify(check: FixCheck, text: str) -> None:
     )
     if floor:
         check.reason = "python"
+        lowest = re.fullmatch(r">=\s*(\d+(?:\.\d+)*)", floor.group(1))
+        check.python_floor = lowest.group(1) if lowest else ""
         check.next_step = (
             f"{package} {version} only supports Python {floor.group(1)}: raise "
             "requires-python, or limit the upgrade to those Python versions with a marker."
         )
+        if check.python_floor:
+            check.next_step += " --fix-plan checks whether raising it lets the fix install."
         return
     pin = _own_pin(text, package, version)
     if pin:
