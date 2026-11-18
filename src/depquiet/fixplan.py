@@ -130,7 +130,7 @@ class LockChange:
     def downgrade(self) -> bool:
         """Some copy ends older than every copy before: uv went back to fit the fixes.
 
-        On sparkgeo/prescient-sdk, keeping Python 3.9 took jupyterlab from 4.5.7 to
+        On a public uv SDK, keeping Python 3.9 took jupyterlab from 4.5.7 to
         2.3.2 (for 3.9) and 4.x (for newer Pythons): the plan must say so.
         """
         if not self.old or not self.new:
@@ -1073,7 +1073,7 @@ def _refine_floor(
 ) -> tuple[str, list[PlanEdit], str, str, list[str]] | None:
     """A slightly higher floor, when the one the fixes asked for still moves packages back.
 
-    On sparkgeo/prescient-sdk, ``>=3.11`` let every fix in, but uv split the
+    On a public uv SDK, ``>=3.11`` let every fix in, but uv split the
     lock at 3.11.5 and gave Python 3.11.0-3.11.4 beautifulsoup4 4.6.3 (2018).
     uv's split points are in the lock it writes, not in its dry-run report:
     the lock is written on another temporary copy, and the splits above the
@@ -1294,7 +1294,7 @@ def _final_versions(report: str) -> dict[str, list[str]]:
 def _count_carried(items: list[PlanItem], report: str) -> None:
     """A fix left out can still land: the verified lock may move its package past it.
 
-    On sparkgeo/prescient-sdk, ``jupyterlab==4.5.11`` did not resolve with the
+    On a public uv SDK, ``jupyterlab==4.5.11`` did not resolve with the
     rest, while the same verified lock moved jupyterlab 4.5.7 → 4.6.6. The
     alert closes, so the plan counts it, at the version the lock reaches.
     """

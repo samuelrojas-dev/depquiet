@@ -1,6 +1,6 @@
 """The exact Python floor, when the one the fixes ask for still splits the lock.
 
-On sparkgeo/prescient-sdk, ``requires-python >=3.11`` let all 21 fixes in, but
+On a public uv SDK, ``requires-python >=3.11`` let all 21 fixes in, but
 uv split the lock at 3.11.5: Python 3.11.0-3.11.4 got beautifulsoup4 4.6.3
 (2018). By hand, ``>=3.11.5`` left one beautifulsoup4, 4.14.3. The plan now
 finds that floor itself, from the split points in the lock uv writes.
