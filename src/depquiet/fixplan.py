@@ -107,12 +107,38 @@ class PlanItem:
 
 
 @dataclass
+class LockChange:
+    """A package the plan moves in the lockfile besides the fixes themselves."""
+
+    package: str
+    old: str  # "" when the plan adds it
+    new: str  # "" when the plan removes it
+
+    @property
+    def order(self) -> tuple[int, str]:
+        """Moves first (a parent that has to move matters most), then additions, removals."""
+        kind = 2 if not self.new else 1 if not self.old else 0
+        return kind, self.package.lower()
+
+    def describe(self) -> str:
+        if not self.old:
+            return f"{self.package} {self.new} (added)"
+        if not self.new:
+            return f"{self.package} {self.old} (removed: nothing requires it any more)"
+        return f"{self.package} {self.old} → {self.new}"
+
+
+@dataclass
 class FixPlan:
     status: str  # "verified", "partial", "none", "unsupported"
     items: list[PlanItem] = field(default_factory=list)
     diff: str = ""
     note: str = ""
     tool: str = "uv"  # the resolver that verified it: "uv" or "poetry"
+    # Everything else the verified lock moves: a parent that has to move with a
+    # fix, packages that are no longer required. A reviewer sees these in the
+    # lockfile diff, so the plan names them.
+    lock_changes: list[LockChange] = field(default_factory=list)
 
     @property
     def included(self) -> list[PlanItem]:
@@ -166,6 +192,10 @@ class FixPlan:
             ],
             "left_out": [
                 {"package": i.package, "version": i.version, "why": i.why} for i in self.left_out
+            ],
+            "lock_changes": [
+                {"package": c.package, "from": c.old or None, "to": c.new or None}
+                for c in self.lock_changes
             ],
         }
 
@@ -611,8 +641,18 @@ def _locked_versions(project: Path) -> dict[str, str]:
     }
 
 
-def _resolves(root: Path, executable: str, items: list[PlanItem], timeout: int) -> str | None:
-    """None when the items resolve together, else uv's explanation."""
+def _resolves(
+    root: Path,
+    executable: str,
+    items: list[PlanItem],
+    timeout: int,
+    output: list[str] | None = None,
+) -> str | None:
+    """None when the items resolve together, else uv's explanation.
+
+    On success, uv's report (its Update/Add/Remove lines) replaces the
+    contents of ``output``: the last success is the plan's final lock.
+    """
     specs: list[str] = []
     for item in items:
         specs.append(f"{item.package}=={item.version}")
@@ -621,6 +661,8 @@ def _resolves(root: Path, executable: str, items: list[PlanItem], timeout: int) 
     if isinstance(answer, str):
         return answer
     code, stdout, stderr = answer
+    if code == 0 and output is not None:
+        output[:] = [stdout + "\n" + stderr]
     return None if code == 0 else _explain(stderr or stdout)
 
 
@@ -793,7 +835,8 @@ def build_fix_plan(
         shutil.copytree(project, root, ignore=_COPY_IGNORE, symlinks=True)
         everything = [e for i in candidates for e in i.edits]
         _apply(root, everything)
-        failure = _resolves(root, executable, candidates, timeout)
+        report: list[str] = []
+        failure = _resolves(root, executable, candidates, timeout, report)
         if failure is None:
             for item in candidates:
                 item.included = True
@@ -804,7 +847,7 @@ def build_fix_plan(
             kept: list[PlanItem] = []
             for item in candidates:
                 _apply(root, item.edits)
-                reason = _resolves(root, executable, [*kept, item], timeout)
+                reason = _resolves(root, executable, [*kept, item], timeout, report)
                 if reason is None:
                     item.included = True
                     kept.append(item)
@@ -828,7 +871,33 @@ def build_fix_plan(
             "it once your cooldown admits the fix by itself: left in place, it holds the "
             "package on that release."
         )
-    return FixPlan(status, items=items, diff=diff, note=note)
+    plan = FixPlan(status, items=items, diff=diff, note=note)
+    if included and report:
+        plan.lock_changes = _uv_lock_changes(report[0], included)
+    return plan
+
+
+_LOCK_LINE = re.compile(
+    r"^\s*(Update|Add|Remove)\s+([A-Za-z0-9][A-Za-z0-9._-]*)\s+v(\S+)(?:\s+->\s+v(\S+))?",
+    re.M,
+)
+
+
+def _uv_lock_changes(report: str, included: list[PlanItem]) -> list[LockChange]:
+    """What the verified plan moves in uv.lock besides its fixes, from uv's own report."""
+    planned = {_pep503(i.package) for i in included}
+    planned |= {_pep503(s.split("==")[0]) for i in included for s in i.also_upgrade}
+    changes: list[LockChange] = []
+    for verb, name, first, second in _LOCK_LINE.findall(report):
+        if _pep503(name) in planned:
+            continue
+        if verb == "Update":
+            changes.append(LockChange(name, first, second))
+        elif verb == "Add":
+            changes.append(LockChange(name, "", first))
+        else:
+            changes.append(LockChange(name, first, ""))
+    return sorted(changes, key=lambda c: c.order)
 
 
 def _revert(root: Path, edits: list[PlanEdit]) -> None:
@@ -969,6 +1038,10 @@ def fix_plan_markdown(plan: FixPlan, result: ScanResult, version: str = "") -> s
             f"| `{cell(item.package)}` | {cell(item.installed or '?')} "
             f"| {cell(item.version)}{major} | {cell(ids)} | {cell(_how(item))} |"
         )
+    if plan.lock_changes:
+        lockfile = "poetry.lock" if plan.tool == "poetry" else "uv.lock"
+        lines += ["", f"### Other changes in `{lockfile}`", ""]
+        lines += [f"- {cell(c.describe())}" for c in plan.lock_changes]
     if plan.left_out:
         lines += ["", "### Not included", ""]
         lines += [
@@ -1019,6 +1092,11 @@ def print_fix_plan(plan: FixPlan, file: Any) -> None:
         )
     for item in plan.left_out:
         print(f"   ✗ {item.package} → {item.version}: {clip(item.why, 200)}", file=file)
+    if plan.lock_changes:
+        lockfile = "poetry.lock" if plan.tool == "poetry" else "uv.lock"
+        print(f"\n   It also changes {lockfile}:", file=file)
+        for change in plan.lock_changes:
+            print(f"     · {change.describe()}", file=file)
     if plan.included:
         verdict = (
             "all fixes resolve together"

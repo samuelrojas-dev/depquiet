@@ -618,6 +618,24 @@ Real run on a small project pinning `requests==2.31.0` and `botocore==1.29.0` (w
 After `git apply` and that command, pip-audit reports no known vulnerabilities in the
 project's dependencies. Python-floor blocks are reported, not planned.
 
+The plan also names everything else the verified lock moves, because a reviewer sees it in
+the lockfile diff: a parent that has to move with a fix without any requirement change, and
+packages that nothing requires any more. On a project locked at oaklib 0.7.4, which caps
+setuptools below 82:
+
+```
+🔧 Fix plan
+   ✓ setuptools 81.0.0 → 83.0.0: upgrade  (major version change)
+
+   It also changes uv.lock:
+     · oaklib 0.7.4 → 0.7.5
+     · appdirs 1.4.4 (removed: nothing requires it any more)
+     · eutils 0.6.1 (removed: nothing requires it any more)
+     ...
+```
+
+When only the lockfile moves, there is no diff to write, and depquiet says so.
+
 #### Poetry projects
 
 `--fix-plan`, `--apply` and `fix-pr` work on Poetry projects too (a `poetry.lock` and no

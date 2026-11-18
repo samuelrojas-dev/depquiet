@@ -958,6 +958,12 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
             )
         elif fix_plan.diff and not args.json_output:
             print(fix_plan.diff)
+        elif fix_plan.included and args.fix_plan != "-":
+            print(
+                f"   No requirement changes: only the lockfile moves, so {args.fix_plan} was "
+                "not written. The command above makes the whole change.",
+                file=sys.stderr,
+            )
         if args.fix_plan_report is not None and fix_plan.included:
             args.fix_plan_report.write_text(
                 fix_plan_markdown(fix_plan, result, __version__), encoding="utf-8"

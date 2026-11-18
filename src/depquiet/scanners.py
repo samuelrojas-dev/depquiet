@@ -24,6 +24,12 @@ class ScanError(Exception):
 
 
 def _tail(text: str, limit: int = 300) -> str:
+    # A Python traceback ends with the error itself; the frames before it are
+    # noise in a one-line message ("requests.exceptions.ReadTimeout: ...").
+    if "Traceback (most recent call last)" in text:
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        if lines:
+            return lines[-1][-limit:]
     text = " ".join(text.split())
     return text[-limit:] if text else "no output"
 
