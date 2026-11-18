@@ -983,6 +983,9 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
     if ignore_file is not None:
         print_ignore_warnings(ignore_file)
     if fix_plan is not None:
+        # The scan report goes to stdout, the plan to stderr: flush first, so a
+        # run saved with 2>&1 keeps the report above the plan.
+        sys.stdout.flush()
         print_fix_plan(fix_plan, sys.stderr)
         if fix_plan.diff and args.fix_plan != "-":
             Path(args.fix_plan).write_text(fix_plan.diff, encoding="utf-8")

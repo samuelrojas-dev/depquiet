@@ -173,6 +173,23 @@ def _dependency_blockers(text: str, package: str, project_names: set[str]) -> li
     return names
 
 
+def _lowest_python(spec: str) -> str:
+    """``>=3.10`` → ``3.10``; ``>3.9.0`` → ``3.9.1``; an upper bound → "".
+
+    uv writes ``>3.9.0`` for a package that excludes 3.9.0 itself
+    (cryptography: ``>=3.9,!=3.9.0``): the lowest Python it takes is 3.9.1.
+    """
+    match = re.fullmatch(r"(>=|>)\s*(\d+(?:\.\d+)*)", spec.strip())
+    if not match:
+        return ""
+    op, version = match.groups()
+    if op == ">=":
+        return version
+    parts = version.split(".")
+    parts[-1] = str(int(parts[-1]) + 1)
+    return ".".join(parts)
+
+
 def _classify(check: FixCheck, text: str) -> None:
     """Fill ``reason`` and ``next_step`` from the resolver's full message."""
     package, version = check.package, check.version
@@ -191,8 +208,7 @@ def _classify(check: FixCheck, text: str) -> None:
     )
     if floor:
         check.reason = "python"
-        lowest = re.fullmatch(r">=\s*(\d+(?:\.\d+)*)", floor.group(1))
-        check.python_floor = lowest.group(1) if lowest else ""
+        check.python_floor = _lowest_python(floor.group(1))
         check.next_step = (
             f"{package} {version} only supports Python {floor.group(1)}: raise "
             "requires-python, or limit the upgrade to those Python versions with a marker."
