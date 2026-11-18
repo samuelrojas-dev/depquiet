@@ -7,7 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **The fix plan names everything the verified lock moves**, not only the fixes: a parent
+  that moves without a requirement change, added packages, and packages nothing requires any
+  more. In the text output ("It also changes uv.lock"), the pull request description (`--fix-
+  plan-report`, the Action's `fix-pr`) and `--json` (`lock_changes`), for uv and Poetry.
+  Found on microbiomedata/nmdc-lakehouse: the plan said "setuptools 81.0.0 → 84.1.0" while
+  the lock also moved oaklib 0.7.4 → 0.7.5 and dropped six packages.
+
 ### Fixed
+- `--fix-plan FILE` says so when it writes no file: a plan that only moves the lockfile has
+  no requirement diff, and the file silently did not appear.
+- A scanner error that ends in a Python traceback is reported by its last line
+  (`requests.exceptions.ReadTimeout: ...`) instead of a slice of the traceback.
 - `depquiet baseline create` says why when it accepts nothing: baseline v2 accepts npm
   component evidence only, so on a Python scan it suppressed no alert while reporting
   success. It now names the alternative (`depquiet --baseline <scan.json>`).

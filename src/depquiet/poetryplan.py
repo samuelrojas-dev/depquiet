@@ -35,6 +35,7 @@ from depquiet.fixplan import (
     _REQUIREMENT,
     NOTHING_TO_FIX,
     FixPlan,
+    LockChange,
     PlanEdit,
     PlanItem,
     _apply,
@@ -414,6 +415,9 @@ def build_poetry_plan(result: ScanResult, project: Path, *, timeout: int = 600) 
     chosen = [i for i in items if i.included]
     if not chosen:
         return FixPlan("none", items=items, note="No fix could be verified.", tool="poetry")
+    fixed_names = {_pep503(i.package) for i in chosen}
+    fixed_names |= {_pep503(s.split("==")[0]) for i in chosen for s in i.also_upgrade}
+    lock_changes = _lock_changes(_lock(project), final, fixed_names)
     status = "verified" if len(chosen) == len(items) else "partial"
     plan = FixPlan(
         status,
@@ -425,8 +429,25 @@ def build_poetry_plan(result: ScanResult, project: Path, *, timeout: int = 600) 
             "constraints allow, which can be newer than the fix."
         ),
         tool="poetry",
+        lock_changes=lock_changes,
     )
     return plan
+
+
+def _lock_changes(
+    before: dict[str, dict[str, Any]], after: dict[str, dict[str, Any]], planned: set[str]
+) -> list[LockChange]:
+    """Packages the verified poetry.lock moves besides the planned fixes."""
+    changes: list[LockChange] = []
+    for name in sorted(set(before) | set(after)):
+        if name in planned:
+            continue
+        old = str(before.get(name, {}).get("version", ""))
+        new = str(after.get(name, {}).get("version", ""))
+        if old != new:
+            shown = after.get(name, before.get(name, {})).get("name", name)
+            changes.append(LockChange(str(shown), old, new))
+    return sorted(changes, key=lambda c: c.order)
 
 
 def _names(items: list[PlanItem]) -> list[str]:
