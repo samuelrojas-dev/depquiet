@@ -190,6 +190,33 @@ def _lowest_python(spec: str) -> str:
     return ".".join(parts)
 
 
+_HINT = re.compile(r"([A-Za-z0-9][A-Za-z0-9._-]*)==(\S+?) only supports ([<>=!~][^\s),]*)")
+
+
+def _same_version(a: str, b: str) -> bool:
+    """``4.0`` and ``4.0.0`` are the same release: uv's hint trims trailing zeros."""
+    return re.sub(r"(\.0+)+$", "", a) == re.sub(r"(\.0+)+$", "", b)
+
+
+def _python_hint(text: str, package: str, version: str) -> tuple[str | None, str] | None:
+    """The Python range uv's hint says the fix needs: (None, spec) when it names the
+    fix itself, (``name==version``, spec) when it names the package that limits it.
+
+    uv writes ``soupsieve==4.0 only supports >=3.11.5`` for soupsieve 4.0.0, and for
+    a transitive fix it can name a parent instead (``matplotlib==3.11.0 only
+    supports >=3.11`` when only Python 3.11 matplotlibs take pillow 13): either
+    way, that is the floor the fix needs.
+    """
+    hints = _HINT.findall(text)
+    for name, ver, spec in hints:
+        if _pep503(name) == _pep503(package) and _same_version(ver, version):
+            return None, spec
+    for name, ver, spec in hints:
+        if _lowest_python(spec):
+            return f"{name} {ver}", spec
+    return None
+
+
 def _classify(check: FixCheck, text: str) -> None:
     """Fill ``reason`` and ``next_step`` from the resolver's full message."""
     package, version = check.package, check.version
@@ -201,16 +228,14 @@ def _classify(check: FixCheck, text: str) -> None:
             "the exclude-newer-package entry)."
         )
         return
-    floor = re.search(
-        rf"{re.escape(package)}=={re.escape(version)} only supports ([<>=!~][^\s),]*)",
-        text,
-        re.I,
-    )
+    floor = _python_hint(text, package, version)
     if floor:
+        subject, spec = floor
         check.reason = "python"
-        check.python_floor = _lowest_python(floor.group(1))
+        check.python_floor = _lowest_python(spec)
+        needs = f"{package} {version}" if subject is None else f"{subject}, which it needs,"
         check.next_step = (
-            f"{package} {version} only supports Python {floor.group(1)}: raise "
+            f"{needs} only supports Python {spec}: raise "
             "requires-python, or limit the upgrade to those Python versions with a marker."
         )
         if check.python_floor:
