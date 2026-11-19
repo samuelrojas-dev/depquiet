@@ -1330,6 +1330,13 @@ Coding agents already try to work out by hand why a Dependabot fix won't install
 ships an MCP server so they can ask it instead, and get an answer checked with the
 project's resolver rather than a guess.
 
+![Claude Code asks depquiet to plan the fixes for a public uv project: the plan raises requires-python to 3.11.5 and verifies it with uv](https://raw.githubusercontent.com/samuelrojas-dev/depquiet/main/docs/demo/mcp-demo.gif)
+
+Claude Code with depquiet on a public scientific Python project (`requires-python
+>=3.10`): 105 alerts, 77 to fix. After the user agrees to drop old Pythons, the plan
+raises `requires-python` to 3.11.5, not 3.11, because every patched soupsieve needs 3.11.5,
+and the whole change resolves with uv. The wait while depquiet resolves is sped up.
+
 ```bash
 pip install 'depquiet[mcp]' pip-audit
 claude mcp add --transport stdio depquiet -- depquiet-mcp   # Claude Code
