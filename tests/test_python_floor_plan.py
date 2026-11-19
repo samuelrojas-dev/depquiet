@@ -70,6 +70,26 @@ def test_an_upper_python_bound_is_not_a_floor() -> None:
     assert "--fix-plan" not in check.next_step
 
 
+def test_the_hint_matches_a_version_uv_writes_without_trailing_zeros() -> None:
+    """uv's hint says ``soupsieve==4.0`` for soupsieve 4.0.0 (seen in a real run)."""
+    check = FixCheck("blocked", "soupsieve", "4.0.0")
+    _classify(
+        check,
+        "hint: The `requires-python` value (>=3.10, <3.15) includes Python versions that "
+        "are not supported by your dependencies (e.g., soupsieve==4.0 only supports "
+        ">=3.11.5). Consider using a more restrictive `requires-python` value (like >=3.11.5).",
+    )
+    assert check.reason == "python" and check.python_floor == "3.11.5"
+    assert check.next_step.startswith("soupsieve 4.0.0 only supports Python >=3.11.5")
+
+
+def test_a_hint_about_the_package_that_limits_a_transitive_fix_is_the_floor() -> None:
+    check = FixCheck("blocked", "pillow", "13.0.0")
+    _classify(check, "hint: (e.g., matplotlib==3.11.0 only supports >=3.11). Consider ...")
+    assert check.reason == "python" and check.python_floor == "3.11"
+    assert check.next_step.startswith("matplotlib 3.11.0, which it needs, only supports")
+
+
 def test_forked_lock_updates_are_read() -> None:
     assert "pytest v8.4.2, v9.2.0 -> v9.2.0" in _updates(UV_RAISED_REPORT)
     changes = _uv_lock_changes(UV_RAISED_REPORT, [fp.PlanItem("pytest", "9.2.0")])
