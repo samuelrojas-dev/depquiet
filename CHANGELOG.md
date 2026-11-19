@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.50.2] - 2026-11-19
+
+### Fixed
+- **The Python floor plan read uv's hint wrongly in two cases.** uv writes
+  `soupsieve==4.0 only supports >=3.11.5` for soupsieve 4.0.0, and the check only matched
+  the exact version string, so the 3.11.5 floor was lost: with another fix needing 3.11,
+  `--raise-python-floor` raised `requires-python` to 3.11, which leaves soupsieve's alerts
+  open. Versions now compare without trailing zeros, and a floor hint that names the
+  package limiting a transitive fix counts as the floor that fix needs. Found while an
+  agent ran `plan_fixes` on a real project.
+
+### Changed
+- **The MCP tools describe every parameter and result field.** Parameters carry
+  descriptions in the input schema, results have an output schema (`structuredContent`),
+  and the tool descriptions say when to use each tool, what it needs (network; the plan
+  runs the resolver) and that neither edits the project.
+
 ## [0.50.1] - 2026-11-18
 
 ### Added
@@ -1406,7 +1423,8 @@ requirements.txt and npm projects:
 - CI workflow with lint, typecheck, test matrix (3.11/3.12/3.13), and build
 - Automated release workflow with trusted PyPI publishing
 
-[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.50.1...HEAD
+[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.50.2...HEAD
+[0.50.2]: https://github.com/samuelrojas-dev/depquiet/compare/v0.50.1...v0.50.2
 [0.50.1]: https://github.com/samuelrojas-dev/depquiet/compare/v0.50.0...v0.50.1
 [0.50.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.49.0...v0.50.0
 [0.49.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.48.0...v0.49.0
