@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **depquiet on the MCP Registry.** `server.json` describes the server for
+  registry.modelcontextprotocol.io, run as `uvx --with 'mcp>=2.3,<3' --with pip-audit depquiet
+  mcp`; the README carries the `mcp-name:` marker the registry checks, and the release
+  workflow publishes the entry after PyPI (GitHub OIDC, `mcp-publisher` pinned by version and
+  checksum). New `depquiet mcp` subcommand, the same server as `depquiet-mcp`.
+
 ## [0.50.0] - 2026-11-18
 
 ### Added

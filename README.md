@@ -1,5 +1,7 @@
 # depquiet
 
+<!-- mcp-name: io.github.samuelrojas-dev/depquiet -->
+
 [![CI](https://github.com/samuelrojas-dev/depquiet/actions/workflows/ci.yml/badge.svg)](https://github.com/samuelrojas-dev/depquiet/actions/workflows/ci.yml)
 [![PyPI version](https://img.shields.io/pypi/v/depquiet)](https://pypi.org/project/depquiet/)
 [![Python versions](https://img.shields.io/pypi/pyversions/depquiet)](https://pypi.org/project/depquiet/)
@@ -1332,6 +1334,10 @@ project's resolver rather than a guess.
 pip install 'depquiet[mcp]' pip-audit
 claude mcp add --transport stdio depquiet -- depquiet-mcp   # Claude Code
 ```
+
+With uv, without installing anything: `uvx --with 'mcp>=2.3,<3' --with pip-audit depquiet mcp` (that is how
+the [MCP Registry](https://registry.modelcontextprotocol.io) entry runs it). `depquiet mcp`
+and `depquiet-mcp` are the same server.
 
 Other clients (Cursor, VS Code, Claude Desktop) take the usual entry:
 

@@ -475,6 +475,13 @@ def main(argv: list[str] | None = None) -> int:
         return explain_main(effective[1:])
     if effective and effective[0] == "stats":
         return stats_main(effective[1:])
+    if effective and effective[0] == "mcp":
+        # The MCP server (depquiet-mcp), as a subcommand too: registries run a
+        # PyPI server as `uvx <package> ...`, which is the `depquiet` script.
+        from depquiet.mcp_server import main as mcp_main
+
+        mcp_main()
+        return 0
 
     parser = argparse.ArgumentParser(
         prog="depquiet",
