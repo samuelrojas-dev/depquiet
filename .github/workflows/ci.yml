@@ -157,19 +157,6 @@ jobs:
           offline: "true"
           fail-on-action: "false"
           sarif: depquiet.sarif
-      - name: Close the fixture's alerts again
-        # The upload above opens code scanning alerts for a deliberately
-        # vulnerable fixture on this repository. An empty analysis in the same
-        # category marks them fixed, so the Security tab only shows real ones.
-        if: github.event_name == 'push'
-        run: |
-          printf '%s' '{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"depquiet","rules":[]}},"results":[]}]}' > depquiet-empty.sarif
-      - name: Upload the empty analysis
-        if: github.event_name == 'push'
-        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
-        with:
-          sarif_file: depquiet-empty.sarif
-          category: depquiet
       - name: Python project (pip-audit on uv.lock)
         id: python
         uses: ./
@@ -193,6 +180,33 @@ jobs:
           test "$NPM_TOTAL" -gt 0 && test "$NPM_FILTERED" -gt 0
           # black (dev group only) is filtered, requests (production) is not.
           test "$PY_TOTAL" -gt 1 && test "$PY_FILTERED" -gt 0 && test "$PY_ACTION" -gt 0
+
+  close-fixture-alerts:
+    # The smoke test's SARIF upload opens code scanning alerts for a
+    # deliberately vulnerable fixture on this repository. An empty analysis in
+    # the same category marks them fixed, so the Security tab shows real ones
+    # only. Its own job: code scanning takes one upload per tool and category
+    # per job.
+    name: Close the fixture's code scanning alerts
+    runs-on: ubuntu-latest
+    needs: action
+    if: github.event_name == 'push'
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Write an empty analysis
+        run: |
+          printf '%s' '{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"depquiet","rules":[]}},"results":[]}]}' > depquiet-empty.sarif
+      - name: Upload it
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: depquiet-empty.sarif
+          category: depquiet
 
   build:
     name: Build Package
