@@ -1322,6 +1322,37 @@ depquiet --fail-on high
 depquiet --fail-on none --summary $GITHUB_STEP_SUMMARY
 ```
 
+## Use it from a coding agent (MCP)
+
+Coding agents already try to work out by hand why a Dependabot fix won't install. depquiet
+ships an MCP server so they can ask it instead, and get an answer checked with the
+project's resolver rather than a guess.
+
+```bash
+pip install 'depquiet[mcp]' pip-audit
+claude mcp add --transport stdio depquiet -- depquiet-mcp   # Claude Code
+```
+
+Other clients (Cursor, VS Code, Claude Desktop) take the usual entry:
+
+```json
+{ "mcpServers": { "depquiet": { "command": "depquiet-mcp" } } }
+```
+
+Two tools, both read-only:
+
+- **`triage_alerts(path)`**: the scan, per alert: verdict, why (dev-only, test-only,
+  unreachable), fix version, and which Pythons a vulnerable locked copy serves.
+- **`plan_fixes(path, raise_python_floor=false, include_filtered=false)`**: the verified
+  plan for uv and Poetry projects: the diff, the lock command, what else the lock moves,
+  downgrades, and whether raising `requires-python` would let more fixes in. When it would,
+  the result says so, and the agent is told to ask the user before passing
+  `raise_python_floor=true`.
+
+Neither tool edits the project: the plan is checked on a temporary copy, and the agent
+applies the diff or runs the command when the user agrees. As with the CLI, resolving
+can build source distributions, so point it at projects you would resolve yourself.
+
 ## CI Integration
 
 

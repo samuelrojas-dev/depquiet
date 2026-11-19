@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **An MCP server for coding agents** (`depquiet-mcp`, `pip install 'depquiet[mcp]'`), with two
+  read-only tools: `triage_alerts` (the scan, trimmed per alert) and `plan_fixes` (the
+  verified fix plan with its diff, lock command and Python floor option). Neither edits the
+  project; the agent applies the plan when the user agrees. Checked end to end with the
+  official MCP client over stdio on a real uv project with pip-audit.
+
 ## [0.49.0] - 2026-11-18
 
 ### Added
