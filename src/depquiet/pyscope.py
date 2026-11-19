@@ -17,6 +17,7 @@ from __future__ import annotations
 import re
 import tomllib
 from pathlib import Path
+from typing import Any
 
 from depquiet.models import ScanResult, version_key
 
@@ -46,7 +47,7 @@ def python_scopes(project: Path) -> dict[tuple[str, str], str]:
     except (OSError, tomllib.TOMLDecodeError, UnicodeDecodeError):
         return {}
     floor = _floor(str(lock.get("requires-python", "")))
-    copies: dict[str, list[dict]] = {}
+    copies: dict[str, list[dict[str, Any]]] = {}
     for package in lock.get("package", []):
         if isinstance(package, dict) and "name" in package and "version" in package:
             copies.setdefault(_pep503(package["name"]), []).append(package)
