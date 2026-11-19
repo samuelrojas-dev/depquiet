@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- An alert whose vulnerable copy uv.lock holds only for older Pythons says so: "only
+  installed on Python below 3.11.5; requires-python >=3.11.5 would drop this copy" (`--json`:
+  `python_scope`). With `requires-python = ">=3.11"`, uv locks soupsieve 2.10 for
+  3.11.0–3.11.4 because every patched soupsieve needs 3.11.5; seen in four public projects
+  in November 2026. The verdict does not change: those installs are still exposed.
+
 ### Changed
 - With `--fix-plan`, the text report groups the alerts by package (the shape of the plan),
   with one summary line for the fix checks instead of three or four lines per alert. A

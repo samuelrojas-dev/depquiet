@@ -352,6 +352,9 @@ class TriageResult:
     decision_trace: list[DecisionChange] = field(default_factory=list)
     # depquiet.fixcheck.FixCheck when --check-fixes asked the resolver.
     fix_check: Any = None
+    # "3.11.5" when uv.lock holds this vulnerable copy only for Pythons below
+    # that version (a lock forked by Python version; see depquiet.pyscope).
+    python_scope: str = ""
 
     @property
     def reason_summary(self) -> str:

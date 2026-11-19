@@ -163,6 +163,8 @@ def print_scan_result(result: ScanResult, *, plan_follows: bool = False) -> None
                     rest = len(r.reachable_imports) - 3
                     print(f"     {_c(_DIM, f'→ and {rest} more (depquiet explain shows all)')}")
 
+            if r.python_scope:
+                print(f"     {_c(_YELLOW, _scope_line(r.python_scope))}")
             if r.vuln.title:
                 print(f"     {_c(_DIM, _one_line(r.vuln.title))}")
             if r.fix_check is not None:
@@ -205,11 +207,19 @@ def _print_by_package(action: list[Any]) -> None:
         kev_str = f"  {_c(_RED, 'KNOWN EXPLOITED: ' + ', '.join(kev))}" if kev else ""
         print(f"   {_c(_RED, '•')} {package}  {noun}{fix_str}{kev_str}")
         print(f"     {_c(_DIM, first_items(ids, 4))}")
+        scopes = {r.python_scope for r in rows}
+        if len(scopes) == 1 and rows[0].python_scope:
+            print(f"     {_c(_YELLOW, _scope_line(rows[0].python_scope))}")
         imports = rows[0].reachable_imports
         if imports:
             more = f" and {len(imports) - 2} more" if len(imports) > 2 else ""
             print(f"     {_c(_DIM, '→')} {', '.join(imports[:2])}{more}")
     _print_check_summary(action)
+
+
+def _scope_line(cap: str) -> str:
+    """For an alert whose vulnerable copy only older Pythons install."""
+    return f"only installed on Python below {cap}; requires-python >={cap} would drop this copy"
 
 
 def _print_check_summary(action: list[Any]) -> None:
