@@ -55,6 +55,7 @@ from depquiet.parsers.osv import parse_lockfiles
 from depquiet.parsers.sbom import SbomParser
 from depquiet.poetryplan import build_poetry_plan, is_poetry_project
 from depquiet.policy import load_policy
+from depquiet.pyscope import apply_python_scopes
 from depquiet.sarif import write_sarif
 from depquiet.sbom import write_sbom
 from depquiet.summary import write_summary
@@ -849,6 +850,9 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
     notices: list[str] = []
     warnings: list[str] = []
 
+    # Which Pythons each vulnerable copy serves, in a lock forked by Python version.
+    apply_python_scopes(result, args.path)
+
     # Apply suppressions (from CLI, config, or project default)
     ignore_file = load_ignore(args.path, ignore_path=merged.ignore)
     if ignore_file is not None:
@@ -1288,6 +1292,7 @@ def _print_json(
             "reachable_imports": tr.reachable_imports,
             "dependency_type": tr.dependency_type,
             "introduced_by": tr.introduced_by,
+            "python_scope": f"<{tr.python_scope}" if tr.python_scope else None,
             "template_id": tr.template_id,
             "template_reason": tr.template_reason,
             "assessment": assess_finding(tr).to_dict(),
