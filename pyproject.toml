@@ -112,8 +112,9 @@ warn_return_any = true
 warn_unused_configs = true
 
 [[tool.mypy.overrides]]
-# The MCP SDK is an optional extra (depquiet[mcp]); CI type-checks without it.
-module = ["mcp", "mcp.*"]
+# The MCP SDK is an optional extra (depquiet[mcp]), with pydantic and
+# typing_extensions; CI type-checks without it.
+module = ["mcp", "mcp.*", "pydantic", "typing_extensions"]
 ignore_missing_imports = true
 
 [tool.coverage.run]

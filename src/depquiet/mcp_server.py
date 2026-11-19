@@ -184,28 +184,20 @@ def build_server() -> Any:
     from mcp.types import ToolAnnotations
 
     from depquiet import __version__
+    from depquiet import mcp_tools as tools
 
     server = MCPServer(name="depquiet", version=__version__, instructions=_INSTRUCTIONS)
-    read_only = ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=True)
+    read_only = ToolAnnotations(read_only_hint=True, idempotent_hint=True, open_world_hint=True)
     server.tool(
         name="triage_alerts",
-        description=(
-            "Scan a Python or JavaScript project (absolute path) and sort its dependency "
-            "alerts into action, review and filtered, with the reason for each: dev-only, "
-            "test-only, unreachable, and which Pythons a vulnerable locked copy serves."
-        ),
+        description=tools.TRIAGE_DESCRIPTION,
         annotations=read_only,
-    )(triage_alerts)
+    )(tools.triage_alerts)
     server.tool(
         name="plan_fixes",
-        description=(
-            "Work out the change that closes the project's alerts (uv or Poetry), verified "
-            "with the resolver on a temporary copy: requirement edits as a diff, the lock "
-            "command, what else the lock moves, downgrades, and whether raising "
-            "requires-python would unblock more fixes. Never edits the project."
-        ),
+        description=tools.PLAN_DESCRIPTION,
         annotations=read_only,
-    )(plan_fixes)
+    )(tools.plan_fixes)
     return server
 
 
