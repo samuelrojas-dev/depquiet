@@ -7,13 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-- SARIF paths are relative to the repository root, as GitHub code scanning reads them.
-  With `--path` (Action: `path:`) set to a subfolder, alerts pointed at `app.js` instead of
-  `sub/folder/app.js`, so GitHub could not link them to the file. The manifest fallback now
-  names the manifest the project has (`pyproject.toml` when there is no
-  `requirements.txt`). Found on depquiet's own repository, where the Action's smoke test
-  opened alerts on `app.js:1` for its test fixture.
+## [0.49.0] - 2026-11-18
 
 ### Added
 - An alert whose vulnerable copy uv.lock holds only for older Pythons says so: "only
@@ -28,18 +22,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   known-exploited (KEV) alert is named on its package's line. On a fresh 0.48.0 run with 21
   alerts, 20 of them tornado, the output went from 107 lines to 50, and the plan from line
   79 to line 22. Without `--fix-plan`, every alert is listed as before.
+- The Action's name (its GitHub Marketplace title) is now "depquiet — Verified Dependency
+  Fix Plans", in line with the README. The `uses: samuelrojas-dev/depquiet@v0` reference
+  does not change.
 
 ### Fixed
+- SARIF paths are relative to the repository root, as GitHub code scanning reads them.
+  With `--path` (Action: `path:`) set to a subfolder, alerts pointed at `app.js` instead of
+  `sub/folder/app.js`, so GitHub could not link them to the file. The manifest fallback now
+  names the manifest the project has (`pyproject.toml` when there is no
+  `requirements.txt`). Found on depquiet's own repository, where the Action's smoke test
+  opened alerts on `app.js:1` for its test fixture.
 - A plan with nothing in it now says that the files asked for were not written
   (`Nothing in the plan yet, so plan.diff and plan.md were not written.`) and, when raising
   requires-python would let fixes in, to run again with `--raise-python-floor`. Found
   following the README on a fresh install of 0.48.0: neither file appeared, and nothing said
   why.
-
-### Changed
-- The Action's name (its GitHub Marketplace title) is now "depquiet — Verified Dependency
-  Fix Plans", in line with the README. The `uses: samuelrojas-dev/depquiet@v0` reference
-  does not change.
 
 ## [0.48.0] - 2026-11-18
 
@@ -1390,7 +1388,8 @@ requirements.txt and npm projects:
 - CI workflow with lint, typecheck, test matrix (3.11/3.12/3.13), and build
 - Automated release workflow with trusted PyPI publishing
 
-[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.48.0...HEAD
+[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.49.0...HEAD
+[0.49.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.48.0...v0.49.0
 [0.48.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.6...v0.48.0
 [0.47.6]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.5...v0.47.6
 [0.47.5]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.4...v0.47.5
