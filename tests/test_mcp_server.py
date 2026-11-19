@@ -113,10 +113,38 @@ def test_server_needs_the_sdk_and_says_how_to_get_it(monkeypatch) -> None:
 
 
 def test_server_registers_both_tools_read_only() -> None:
+    tools = _listed_tools()
+    assert set(tools) == {"triage_alerts", "plan_fixes"}
+    assert all(t.annotations and t.annotations.read_only_hint for t in tools.values())
+
+
+def _listed_tools() -> dict:
     pytest.importorskip("mcp")
     import asyncio
 
     server = mcp_server.build_server()
-    tools = {t.name: t for t in asyncio.run(server.list_tools())}
-    assert set(tools) == {"triage_alerts", "plan_fixes"}
-    assert all(t.annotations and t.annotations.read_only_hint for t in tools.values())
+    return {t.name: t for t in asyncio.run(server.list_tools())}
+
+
+def test_every_parameter_and_result_field_is_described() -> None:
+    """Agents read these schemas to pick arguments and parse results (Glama's TDQS too)."""
+    for tool in _listed_tools().values():
+        params = tool.input_schema["properties"]
+        assert params and all(p.get("description") for p in params.values()), tool.name
+        out = tool.output_schema
+        assert out and "ok" in out["required"] and out["properties"]["ok"].get("description")
+        assert "Read-only" in tool.description and "network" in tool.description
+
+
+def test_the_server_returns_results_that_match_the_output_schema(tmp_path, monkeypatch) -> None:
+    pytest.importorskip("mcp")
+    import asyncio
+
+    _stdin(monkeypatch)
+    server = mcp_server.build_server()
+    result = asyncio.run(server.call_tool("triage_alerts", {"path": str(_project(tmp_path))}))
+    structured = result.structured_content
+    assert structured["ok"] and structured["alerts"][0]["package"] == "requests"
+    missing = asyncio.run(server.call_tool("plan_fixes", {"path": str(tmp_path / "nope")}))
+    structured = missing.structured_content
+    assert structured["ok"] is False and "No such folder" in structured["error"]
