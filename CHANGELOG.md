@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.50.0] - 2026-11-18
+
 ### Added
 - **An MCP server for coding agents** (`depquiet-mcp`, `pip install 'depquiet[mcp]'`), with two
   read-only tools: `triage_alerts` (the scan, trimmed per alert) and `plan_fixes` (the
@@ -1395,7 +1397,8 @@ requirements.txt and npm projects:
 - CI workflow with lint, typecheck, test matrix (3.11/3.12/3.13), and build
 - Automated release workflow with trusted PyPI publishing
 
-[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.49.0...HEAD
+[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.50.0...HEAD
+[0.50.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.49.0...v0.50.0
 [0.49.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.48.0...v0.49.0
 [0.48.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.6...v0.48.0
 [0.47.6]: https://github.com/samuelrojas-dev/depquiet/compare/v0.47.5...v0.47.6
