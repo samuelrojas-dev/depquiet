@@ -148,43 +148,64 @@ def _build_message(tr: TriageResult) -> str:
     return " | ".join(parts)
 
 
+def _repo_prefix(project_path: str) -> str:
+    """The scanned folder's path from the repository root ("" at the root).
+
+    GitHub code scanning resolves SARIF paths from the repository root. With
+    ``--path some/sub/project``, a path relative to the scanned folder
+    ("app.js") pointed at a file that does not exist: the Action's own smoke
+    test opened alerts on ``app.js:1`` for ``benchmarks/.../project/app.js``.
+    The root is the nearest folder with ``.git``; without one, the working
+    directory, when the project is inside it.
+    """
+    project = Path(project_path).resolve()
+    for folder in (project, *project.parents):
+        if (folder / ".git").exists():
+            return "" if folder == project else project.relative_to(folder).as_posix()
+    try:
+        prefix = project.relative_to(Path.cwd().resolve()).as_posix()
+    except ValueError:
+        return ""
+    return "" if prefix == "." else prefix
+
+
+def _join(prefix: str, rel: str) -> str:
+    return f"{prefix}/{rel}" if prefix else rel
+
+
+_MANIFESTS = {
+    "npm": ["package.json"],
+    "pnpm": ["package.json"],
+    "pip": ["requirements.txt", "pyproject.toml"],
+    "uv": ["pyproject.toml", "uv.lock"],
+}
+
+
 def _build_locations(
     tr: TriageResult,
     project_path: str,
     package_manager: str = "npm",
 ) -> list[dict[str, Any]]:
-    """Build SARIF locations from reachable imports or package files."""
+    """Build SARIF locations from reachable imports or package files, from the repo root."""
     locations: list[dict[str, Any]] = []
+    prefix = _repo_prefix(project_path)
 
-    if tr.reachable_imports:
-        for imp in tr.reachable_imports[:5]:
-            # Make path relative to project
-            try:
-                rel = Path(imp).relative_to(project_path).as_posix()
-            except ValueError:
-                rel = imp
-            locations.append(
-                {
-                    "physicalLocation": {
-                        "artifactLocation": {"uri": rel},
-                    }
-                }
-            )
+    for imp in tr.reachable_imports[:5]:
+        path = Path(imp)
+        try:
+            # Imports carry the project path as it was given: trim it first.
+            uri = _join(prefix, path.relative_to(project_path).as_posix())
+        except ValueError:
+            # Outside the project and absolute: kept as it is. Relative: from the project.
+            uri = imp if path.is_absolute() else _join(prefix, path.as_posix())
+        locations.append({"physicalLocation": {"artifactLocation": {"uri": uri}}})
 
     if not locations:
-        # Default to package manifest
-        pm_files = {
-            "npm": "package.json",
-            "pip": "requirements.txt",
-            "uv": "pyproject.toml",
-        }
-        manifest = pm_files.get(package_manager, "package.json")
+        # Default to the package manifest: the first one the project has.
+        candidates = _MANIFESTS.get(package_manager, ["package.json"])
+        manifest = next((m for m in candidates if (Path(project_path) / m).exists()), candidates[0])
         locations.append(
-            {
-                "physicalLocation": {
-                    "artifactLocation": {"uri": manifest},
-                }
-            }
+            {"physicalLocation": {"artifactLocation": {"uri": _join(prefix, manifest)}}}
         )
 
     return locations

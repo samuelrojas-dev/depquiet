@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- SARIF paths are relative to the repository root, as GitHub code scanning reads them.
+  With `--path` (Action: `path:`) set to a subfolder, alerts pointed at `app.js` instead of
+  `sub/folder/app.js`, so GitHub could not link them to the file. The manifest fallback now
+  names the manifest the project has (`pyproject.toml` when there is no
+  `requirements.txt`). Found on depquiet's own repository, where the Action's smoke test
+  opened alerts on `app.js:1` for its test fixture.
+
 ### Added
 - An alert whose vulnerable copy uv.lock holds only for older Pythons says so: "only
   installed on Python below 3.11.5; requires-python >=3.11.5 would drop this copy" (`--json`:
