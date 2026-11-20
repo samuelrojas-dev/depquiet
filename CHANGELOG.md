@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.51.0] - 2026-11-19
+
 ### Added
 - **`--raise-python-floor` works on Poetry projects.** A fix that needs a newer Python was
   left out with "held below by another requirement", which hid the cause: `poetry update`
@@ -16,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with Poetry, as the uv plan does. Without the flag the plan reports the option; with it,
   the diff raises `requires-python`. A `python` constraint in `[tool.poetry.dependencies]`
   is reported, not rewritten.
+
+### Changed
+- **The README shows the MCP server in a real agent run**: a 20-second GIF of Claude Code
+  planning the fixes for a public uv project, ending at the plan that raises
+  `requires-python` to 3.11.5.
 
 ## [0.50.2] - 2026-11-19
 
@@ -1433,7 +1440,8 @@ requirements.txt and npm projects:
 - CI workflow with lint, typecheck, test matrix (3.11/3.12/3.13), and build
 - Automated release workflow with trusted PyPI publishing
 
-[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.50.2...HEAD
+[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.51.0...HEAD
+[0.51.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.50.2...v0.51.0
 [0.50.2]: https://github.com/samuelrojas-dev/depquiet/compare/v0.50.1...v0.50.2
 [0.50.1]: https://github.com/samuelrojas-dev/depquiet/compare/v0.50.0...v0.50.1
 [0.50.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.49.0...v0.50.0
