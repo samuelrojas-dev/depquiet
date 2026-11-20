@@ -19,7 +19,14 @@ import pytest
 import depquiet.fixplan as fp
 import depquiet.poetryplan as pp
 from depquiet.fixplan import FixPlan, PlanEdit, PlanItem, _set_poetry_constraint, apply_fix_plan
-from depquiet.models import ScanResult, Severity, TriageResult, Verdict, Vulnerability
+from depquiet.models import (
+    ScanResult,
+    Severity,
+    TriageResult,
+    Verdict,
+    Vulnerability,
+    version_key,
+)
 from depquiet.poetryplan import allows, build_poetry_plan, is_poetry_project, widen_poetry
 
 
@@ -138,7 +145,9 @@ def _locked(root: Path) -> dict[str, str]:
     return {p["name"]: p["version"] for p in data["package"]}
 
 
-def _fake_update(root: Path, executable: str, names: list[str], timeout: int) -> tuple[int, str]:
+def _fake_update(
+    root: Path, executable: str, names: list[str], timeout: int, limit: int | None = 400
+) -> tuple[int, str]:
     """Move each named package to the newest release the constraints allow."""
     own = tomllib.loads((root / "pyproject.toml").read_text())["tool"]["poetry"]["dependencies"]
     versions = _locked(root)
@@ -303,3 +312,92 @@ def test_check_fixes_alone_points_poetry_users_to_fix_plan(tmp_path, monkeypatch
     main(["--path", str(project), "--stdin", "--check-fixes"])
     err = capsys.readouterr().err
     assert re.search(r"for a Poetry project use\s+--fix-plan", err)
+
+
+# --- the Python floor -----------------------------------------------------------------
+
+_SOUPSIEVE_ERROR = (
+    "Because no versions of soupsieve match >4.1.2 and soupsieve (4.1.1) requires Python "
+    ">=3.11.5, soupsieve is forbidden. So, because soupsieve (4.1.2) requires Python "
+    ">=3.11.5 and pf1 depends on soupsieve (>=4.0.0), version solving failed. For "
+    'soupsieve, a possible solution would be to set the `python` property to ">=3.11.5,<4"'
+)
+
+
+def _soup_update(
+    root: Path, executable: str, names: list[str], timeout: int, limit: int | None = 400
+) -> tuple[int, str]:
+    """Poetry on the soupsieve trap, as seen in a real run with Poetry 2.4.
+
+    Asked for soupsieve as a transitive package, it resolves and keeps 2.8.3 while
+    requires-python admits 3.10; required directly, it fails and names the Python
+    each release needs.
+    """
+    data = tomllib.loads((root / "pyproject.toml").read_text())
+    floor = data["project"]["requires-python"].split(",")[0].lstrip(">=")
+    low = version_key(floor) < version_key("3.11.5")
+    direct = any(d.startswith("soupsieve") for d in data["project"]["dependencies"])
+    if low and direct:
+        return 1, _SOUPSIEVE_ERROR[-limit:] if limit else _SOUPSIEVE_ERROR
+    versions = {"beautifulsoup4": "4.14.3", "soupsieve": "2.8.3" if low else "4.1.2"}
+    (root / "poetry.lock").write_text(
+        "".join(f'[[package]]\nname = "{n}"\nversion = "{v}"\n\n' for n, v in versions.items())
+    )
+    return 0, ""
+
+
+def _soup_project(tmp_path: Path, poetry_python: str = "") -> Path:
+    extra = f'\n[tool.poetry.dependencies]\npython = "{poetry_python}"\n' if poetry_python else ""
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "pf1"\nversion = "0.1.0"\nrequires-python = ">=3.10,<4"\n'
+        'dependencies = ["beautifulsoup4>=4.13"]\n\n[tool.poetry]\npackage-mode = false\n' + extra
+    )
+    (tmp_path / "poetry.lock").write_text(
+        '[[package]]\nname = "beautifulsoup4"\nversion = "4.14.3"\n\n'
+        '[[package]]\nname = "soupsieve"\nversion = "2.8.3"\n'
+    )
+    return tmp_path
+
+
+@pytest.fixture
+def soup_poetry(monkeypatch):
+    monkeypatch.setattr(pp.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(pp, "_run_update", _soup_update)
+
+
+def test_a_fix_that_needs_a_newer_python_gets_the_floor_from_poetry(tmp_path, soup_poetry) -> None:
+    project = _soup_project(tmp_path)
+    plan = build_poetry_plan(_scan(("soupsieve", "2.8.3", "4.0.0")), project)
+    assert plan.status == "none"
+    [item] = plan.left_out
+    assert "needs Python >=3.11.5" in item.why and "--raise-python-floor" in item.why
+    floor = plan.python_floor
+    assert floor is not None and not floor.adopted
+    assert (floor.floor, floor.unblocked, floor.alerts) == ("3.11.5", ["soupsieve"], 1)
+    assert floor.dropped == "3.10 and 3.11 below 3.11.5"
+    assert "verified with Poetry's resolver" in "\n".join(fp.python_floor_lines(floor, "poetry"))
+
+
+def test_raise_python_floor_puts_the_floor_in_the_poetry_plan(tmp_path, soup_poetry) -> None:
+    project = _soup_project(tmp_path)
+    plan = build_poetry_plan(
+        _scan(("soupsieve", "2.8.3", "4.0.0")), project, raise_python_floor=True
+    )
+    assert plan.status == "verified" and plan.python_floor and plan.python_floor.adopted
+    [item] = plan.included
+    assert (item.version, item.python_floor) == ("4.1.2", "3.11.5")
+    assert '-requires-python = ">=3.10,<4"' in plan.diff
+    assert '+requires-python = ">=3.11.5,<4"' in plan.diff
+    assert plan.command == "poetry update --lock soupsieve"
+    # Planned on copies: the project is untouched.
+    assert ">=3.10,<4" in (project / "pyproject.toml").read_text()
+
+
+def test_a_poetry_python_constraint_is_reported_not_rewritten(tmp_path, soup_poetry) -> None:
+    project = _soup_project(tmp_path, poetry_python=">=3.10,<4")
+    plan = build_poetry_plan(
+        _scan(("soupsieve", "2.8.3", "4.0.0")), project, raise_python_floor=True
+    )
+    assert plan.status == "none" and plan.python_floor is not None
+    assert "[tool.poetry.dependencies]" in plan.python_floor.problem
+    assert "needs Python >=3.11.5" in plan.left_out[0].why

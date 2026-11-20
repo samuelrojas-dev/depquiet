@@ -1563,7 +1563,7 @@ def fix_plan_markdown(plan: FixPlan, result: ScanResult, version: str = "") -> s
     return "\n".join(lines) + "\n"
 
 
-def python_floor_lines(option: PythonFloor | None) -> list[str]:
+def python_floor_lines(option: PythonFloor | None, tool: str = "uv") -> list[str]:
     """What raising requires-python would do, in plain lines ([] when not relevant)."""
     if option is None:
         return []
@@ -1583,7 +1583,7 @@ def python_floor_lines(option: PythonFloor | None) -> list[str]:
         f"  Raising requires-python to >={option.floor} "
         f"{'lets' if option.adopted else 'would let'} {len(option.unblocked)} {fixes} "
         f"install ({', '.join(option.unblocked)}; {option.alerts} {alerts}), verified with "
-        "uv's resolver."
+        f"{'Poetry' if tool == 'poetry' else 'uv'}'s resolver."
     )
     drop = f"Python {option.dropped}" if option.dropped else f"Python below {option.floor}"
     lines.append(
@@ -1659,7 +1659,7 @@ def print_fix_plan(plan: FixPlan, file: Any) -> None:
             print(f"     · {change.describe()}", file=file)
         if plan.downgrade_warning():
             print(f"   {plan.downgrade_warning()}", file=file)
-    for line in python_floor_lines(plan.python_floor):
+    for line in python_floor_lines(plan.python_floor, plan.tool):
         print(f"   {line}" if line else "", file=file)
     if plan.included:
         verdict = (
