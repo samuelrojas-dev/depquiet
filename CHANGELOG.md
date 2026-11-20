@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.51.1] - 2026-11-20
+
+### Changed
+- **The README leads with the fix plan.** It opens with the problem (Dependabot cannot update
+  to a non-vulnerable version) and a real before/after of `--fix-plan`, and is 264 lines
+  instead of 1,779. Reference material moved verbatim to `docs/` (fix plans, triage, inputs,
+  CLI, CI, SBOM and OpenVEX, configuration, templates, benchmarks).
+- `depquiet init` links the generated config to `docs/configuration.md`.
+
 ## [0.51.0] - 2026-11-19
 
 ### Added
@@ -1440,7 +1449,8 @@ requirements.txt and npm projects:
 - CI workflow with lint, typecheck, test matrix (3.11/3.12/3.13), and build
 - Automated release workflow with trusted PyPI publishing
 
-[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.51.0...HEAD
+[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.51.1...HEAD
+[0.51.1]: https://github.com/samuelrojas-dev/depquiet/compare/v0.51.0...v0.51.1
 [0.51.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.50.2...v0.51.0
 [0.50.2]: https://github.com/samuelrojas-dev/depquiet/compare/v0.50.1...v0.50.2
 [0.50.1]: https://github.com/samuelrojas-dev/depquiet/compare/v0.50.0...v0.50.1
