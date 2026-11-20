@@ -438,13 +438,101 @@ def build_poetry_plan(
 
     Fixes left out because they need a newer Python get a Python floor option,
     verified with Poetry on a copy whose requires-python is raised; with
-    ``raise_python_floor`` the plan adopts it.
+    ``raise_python_floor`` the plan adopts it. Without it, the newest release
+    that still installs on the current Python goes in as a partial fix.
     """
+    plan, floors = _floor_plan(
+        result,
+        project,
+        timeout=timeout,
+        include_filtered=include_filtered,
+        raise_python_floor=raise_python_floor,
+    )
+    if floors and not (plan.python_floor is not None and plan.python_floor.adopted):
+        _add_partial_fixes(plan, project, floors, result, timeout, include_filtered)
+    return plan
+
+
+def _add_partial_fixes(
+    plan: FixPlan,
+    project: Path,
+    floors: dict[str, str],
+    result: ScanResult,
+    timeout: int,
+    include_filtered: bool,
+) -> None:
+    """Add the newest release each held-back fix can reach on the current Python.
+
+    ``poetry update`` on soupsieve with requires-python >=3.10 moved it from
+    2.8.3 to 2.10 (seen with Poetry 2.4): not the 4.0 fix, but 2.10 closes the
+    advisories fixed in 2.8.4 to 2.10. Checked with the plan's other fixes.
+    """
+    executable = shutil.which("poetry")
+    if executable is None:
+        return
+    kept = [i for i in plan.included]
+    found: list[PlanItem] = []
+    final: dict[str, dict[str, Any]] = {}
+    with tempfile.TemporaryDirectory(prefix="depquiet-partial-") as tmp:
+        work = Path(tmp)
+        for blocked in [i for i in plan.items if not i.included and i.package in floors]:
+            key = _pep503(blocked.package)
+            fixes = [
+                f.vuln.fix_version
+                for f in result.results
+                if _pep503(f.vuln.package) == key
+                and f.vuln.fix_version
+                and not f.vuln.fix_package
+                and (include_filtered or f.verdict is not Verdict.FILTERED)
+            ]
+            copy = _copy(project, work, f"partial-{key}")
+            _apply(copy, unique_edits([e for i in kept for e in i.edits]))
+            code, _detail = _run_update(copy, executable, [*_names(kept), blocked.package], timeout)
+            after = _lock(copy)
+            if code != 0 or key not in after:
+                continue
+            if not all(_reaches(after, i.package, i.version) for i in kept):
+                continue
+            reached = str(after[key]["version"])
+            closes = sum(1 for v in fixes if version_key(v) <= version_key(reached))
+            if not closes or version_key(reached) <= version_key(blocked.installed or "0"):
+                continue
+            item = PlanItem(blocked.package, reached, blocked.installed, included=True)
+            item.partial = (
+                f"closes {closes} of {len(fixes)} alerts; the other "
+                f"{len(fixes) - closes} need Python >={floors[blocked.package]}"
+            )
+            kept.append(item)
+            found.append(item)
+            final = after
+    if not found:
+        return
+    plan.items += found
+    plan.status = "partial"
+    if plan.note == "No fix could be verified.":
+        plan.note = (
+            "Verified with Poetry's resolver only: run your tests. These are partial fixes: "
+            "the full fixes need a newer Python."
+        )
+    planned = {_pep503(i.package) for i in kept}
+    planned |= {_pep503(s.split("==")[0]) for i in kept for s in i.also_upgrade}
+    plan.lock_changes = _lock_changes(_lock(project), final, planned)
+
+
+def _floor_plan(
+    result: ScanResult,
+    project: Path,
+    *,
+    timeout: int,
+    include_filtered: bool,
+    raise_python_floor: bool,
+) -> tuple[FixPlan, dict[str, str]]:
+    """The plan and the Python each held-back fix needs (package -> floor)."""
     plan = _build_poetry_plan(result, project, timeout=timeout, include_filtered=include_filtered)
     blocked = [i for i in plan.items if not i.included and i.why]
     executable = shutil.which("poetry")
     if not blocked or executable is None:
-        return plan
+        return plan, {}
     with tempfile.TemporaryDirectory(prefix="depquiet-floor-") as tmp:
         work = Path(tmp)
         floors = {
@@ -453,7 +541,7 @@ def build_poetry_plan(
             if (need := _python_need(project, work, executable, i, timeout))
         }
         if not floors:
-            return plan
+            return plan, {}
         floor = max(floors.values(), key=version_key)
         edits, dropped, problem = _floor_edits(project, floor)
         if not problem and _poetry_python(project):
@@ -472,7 +560,7 @@ def build_poetry_plan(
                 )
         if problem:
             option.still_blocked = list(floors)
-            return plan
+            return plan, floors
         raised = _copy(project, work, "raised")
         _apply(raised, edits)
         trial = _build_poetry_plan(
@@ -490,7 +578,7 @@ def build_poetry_plan(
         and _pep503(r.vuln.package) in keys
     )
     if not unblocked:
-        return plan
+        return plan, floors
     if not raise_python_floor:
         for item in plan.items:
             if item.package in option.unblocked:
@@ -504,7 +592,7 @@ def build_poetry_plan(
                     + f": raising requires-python to >={floor} lets it install (verified; "
                     "--raise-python-floor adds that change to the plan)."
                 )
-        return plan
+        return plan, floors
     option.adopted = True
     for item in trial.items:
         if item.package in option.unblocked:
@@ -517,7 +605,7 @@ def build_poetry_plan(
         f" The plan raises requires-python to >={floor}: users on older Python versions can "
         "no longer install the project."
     )
-    return trial
+    return trial, floors
 
 
 def _build_poetry_plan(

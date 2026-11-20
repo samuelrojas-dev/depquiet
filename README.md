@@ -24,6 +24,8 @@ depquiet --fix-plan plan.diff   # the change, verified with uv or Poetry
 git apply plan.diff             # then run the lock command it prints
 ```
 
+Or try it without installing anything: `uvx --with pip-audit depquiet --fix-plan`.
+
 ## Before and after
 
 A project pins `requests==2.31.0` and `botocore==1.29.0`, and botocore holds urllib3 back.
@@ -61,7 +63,7 @@ version change above all, is for your tests to say.
   above.
 - **The fix needs a newer Python:** it finds the exact floor and verifies it, `>=3.11.5`
   rather than `>=3.11` when that is what the fix needs. Dropping a Python version is your
-  call, so the edit goes into the plan only with `--raise-python-floor`. Until then, the uv
+  call, so the edit goes into the plan only with `--raise-python-floor`. Until then, the
   plan adds the newest fix your current Python allows and says how many alerts it closes.
 - **Your `exclude-newer` cooldown hides the fix (uv):** it writes the narrowest exemption,
   for that package and only up to the fix release.

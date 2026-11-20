@@ -138,3 +138,12 @@ def test_no_partial_fix_below_what_is_installed(tmp_path, monkeypatch, installed
     _uv(monkeypatch)
     plan = build_fix_plan(_result(), project, _checks())
     assert all(not i.partial for i in plan.items)
+
+
+def test_trailing_zeros_do_not_make_a_release_newer() -> None:
+    """Poetry locks soupsieve "2.10"; the advisory's fix says "2.10.0"."""
+    from depquiet.models import version_key
+
+    assert version_key("2.10.0") == version_key("2.10")
+    assert version_key("2.10") < version_key("2.10.1") < version_key("3")
+    assert version_key("4.0.0") > version_key("3.0.4")

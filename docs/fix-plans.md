@@ -184,8 +184,11 @@ it closes and what the others need. Real run on
 On the same repository, Dependabot reported "cannot update soupsieve to a non-vulnerable
 version" without naming Python
 ([dependabot-core#16987](https://github.com/dependabot/dependabot-core/issues/16987)). With
-`--raise-python-floor` the plan raises the floor instead and adds no partial fix. Poetry
-plans don't add partial fixes yet.
+`--raise-python-floor` the plan raises the floor instead and adds no partial fix.
+
+Poetry plans do the same: asked to update soupsieve on a `>=3.10` project, Poetry moves it to
+2.10, the newest release that installs there, and the plan keeps that as a partial fix when
+it closes at least one alert.
 
 ### Fixing filtered alerts too (`--fix-filtered`)
 

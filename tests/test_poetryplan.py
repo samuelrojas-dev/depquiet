@@ -339,7 +339,10 @@ def _soup_update(
     direct = any(d.startswith("soupsieve") for d in data["project"]["dependencies"])
     if low and direct:
         return 1, _SOUPSIEVE_ERROR[-limit:] if limit else _SOUPSIEVE_ERROR
-    versions = {"beautifulsoup4": "4.14.3", "soupsieve": "2.8.3" if low else "4.1.2"}
+    # Asked to update soupsieve on a 3.10 floor, Poetry moves it to 2.10, the newest
+    # release that installs there (seen with Poetry 2.4).
+    soup = "4.1.2" if not low else ("2.10" if "soupsieve" in names else "2.8.3")
+    versions = {"beautifulsoup4": "4.14.3", "soupsieve": soup}
     (root / "poetry.lock").write_text(
         "".join(f'[[package]]\nname = "{n}"\nversion = "{v}"\n\n' for n, v in versions.items())
     )
@@ -401,3 +404,23 @@ def test_a_poetry_python_constraint_is_reported_not_rewritten(tmp_path, soup_poe
     assert plan.status == "none" and plan.python_floor is not None
     assert "[tool.poetry.dependencies]" in plan.python_floor.problem
     assert "needs Python >=3.11.5" in plan.left_out[0].why
+
+
+def test_the_newest_release_on_the_current_python_goes_in_as_a_partial_fix(
+    tmp_path, soup_poetry
+) -> None:
+    project = _soup_project(tmp_path)
+    scan = _scan(
+        ("soupsieve", "2.8.3", "2.8.4"),
+        ("soupsieve", "2.8.3", "2.10.0"),
+        ("soupsieve", "2.8.3", "4.0.0"),
+    )
+    plan = build_poetry_plan(scan, project)
+    [partial] = plan.included
+    assert (partial.installed, partial.version) == ("2.8.3", "2.10")
+    assert partial.partial == "closes 2 of 3 alerts; the other 1 need Python >=3.11.5"
+    assert plan.status == "partial" and plan.command == "poetry update --lock soupsieve"
+    assert [i.version for i in plan.left_out] == ["4.0.0"]
+    # With the floor raised, the full fix goes in and there is no partial one.
+    raised = build_poetry_plan(scan, project, raise_python_floor=True)
+    assert all(not i.partial for i in raised.items)
