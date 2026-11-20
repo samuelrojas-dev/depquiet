@@ -58,6 +58,8 @@ Data: [`blocked_copies_top1000.csv`](blocked_copies_top1000.csv),
 [`blocked_copies_200_500_stars.csv`](blocked_copies_200_500_stars.csv), and the repo lists
 `repos_top1000.txt` and `repos_200_500_stars.txt`.
 
+Monthly follow-up: [the Python floor index](../index/README.md).
+
 ## Method
 
 1. The 300 most-starred Python repos with more than 1,000 stars, pushed since 1 November
