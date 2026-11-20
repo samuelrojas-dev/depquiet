@@ -61,7 +61,8 @@ version change above all, is for your tests to say.
   above.
 - **The fix needs a newer Python:** it finds the exact floor and verifies it, `>=3.11.5`
   rather than `>=3.11` when that is what the fix needs. Dropping a Python version is your
-  call, so the edit goes into the plan only with `--raise-python-floor`.
+  call, so the edit goes into the plan only with `--raise-python-floor`. Until then, the uv
+  plan adds the newest fix your current Python allows and says how many alerts it closes.
 - **Your `exclude-newer` cooldown hides the fix (uv):** it writes the narrowest exemption,
   for that package and only up to the fix release.
 - **Fixing one package moves another one back:** the plan marks it with ⚠ instead of

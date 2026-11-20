@@ -112,6 +112,9 @@ class PlanItem:
     fixed_in: str = ""  # the advisory's fix, when ``version`` is a newer release already locked
     # Not asked for, but the verified lock moves it past the fix anyway.
     carried: bool = False
+    # Set on the newest fix that installs on the current Python range, when the
+    # full fix needs a newer Python: "closes 5 of 8 alerts; 3 need Python >=3.11.5".
+    partial: str = ""
 
     @property
     def major_jump(self) -> bool:
@@ -269,6 +272,7 @@ class FixPlan:
                     "version": i.version,
                     "fixed_in": i.fixed_in or None,
                     "carried": i.carried,
+                    "partial": i.partial or None,
                     "installed": i.installed,
                     "major_version_change": i.major_jump,
                     "also_upgrade": i.also_upgrade,
@@ -1238,6 +1242,10 @@ def build_fix_plan(
             option.adopted = True
             report[:] = [floor_report]
 
+    if waiting and not (option is not None and option.adopted):
+        items += _partial_fixes(
+            project, executable, items, floors, result, installed, timeout, include_filtered, report
+        )
     if report:
         _count_carried(items, report[0])
     included = [i for i in items if i.included]
@@ -1308,6 +1316,72 @@ def _count_carried(items: list[PlanItem], report: str) -> None:
             item.fixed_in = item.fixed_in or (item.version if reached != item.version else "")
             item.version = reached
             item.included, item.carried, item.why = True, True, ""
+
+
+def _partial_fixes(
+    project: Path,
+    executable: str,
+    items: list[PlanItem],
+    floors: dict[str, str],
+    result: ScanResult,
+    installed: dict[str, str],
+    timeout: int,
+    include_filtered: bool,
+    report: list[str],
+) -> list[PlanItem]:
+    """The newest fix that still installs on the project's Python, for fixes that need a newer one.
+
+    Each advisory has its own fix. In a real run, soupsieve 2.8.3 had 8: 5
+    fixed by releases that install on Python 3.10 (2.8.4 to 2.10), 3 only by
+    releases that need 3.11.5. Keeping requires-python >=3.10, moving to 2.10
+    still closes 5 of them; Dependabot reported only "cannot update". Each
+    candidate is checked with uv together with the fixes already in the plan.
+    """
+    kept = [i for i in items if i.included]
+    found: list[PlanItem] = []
+    for blocked in items:
+        if blocked.included or blocked.package not in floors:
+            continue
+        key = _pep503(blocked.package)
+        fixes = [
+            f.vuln.fix_version
+            for f in result.results
+            if _pep503(f.vuln.package) == key
+            and f.vuln.fix_version
+            and not f.vuln.fix_package
+            and (include_filtered or f.verdict is not Verdict.FILTERED)
+        ]
+        now = installed.get(key, blocked.installed)
+        options = sorted(
+            {
+                v
+                for v in fixes
+                if version_key(v) < version_key(blocked.fixed_in or blocked.version)
+                and (not now or version_key(v) > version_key(now))
+            },
+            key=version_key,
+            reverse=True,
+        )
+        for version in options[:3]:
+            trial = PlanItem(blocked.package, version, now)
+            output: list[str] = []
+            with tempfile.TemporaryDirectory(prefix="depquiet-partial-") as tmp:
+                root = Path(tmp) / "project"
+                shutil.copytree(project, root, ignore=_COPY_IGNORE, symlinks=True)
+                _apply(root, [e for i in kept for e in i.edits])
+                if _resolves(root, executable, [*kept, trial], timeout, output) is not None:
+                    continue
+            closes = sum(1 for v in fixes if version_key(v) <= version_key(version))
+            trial.included = True
+            trial.partial = (
+                f"closes {closes} of {len(fixes)} alerts; the other "
+                f"{len(fixes) - closes} need Python >={floors[blocked.package]}"
+            )
+            report[:] = output
+            kept.append(trial)
+            found.append(trial)
+            break
+    return found
 
 
 def _verify_candidates(
@@ -1449,6 +1523,8 @@ def _how(item: PlanItem) -> str:
     own = [e for e in item.edits if _pep503(e.package) == _pep503(item.package)]
     if item.carried:
         return "moves past the fix with the rest of the plan"
+    if item.partial:
+        return f"the newest fix the current Python range allows: {item.partial}"
     if item.python_floor:
         return f"raises `requires-python` to `>={item.python_floor}`, which the fix needs"
     if item.published:
@@ -1479,11 +1555,13 @@ def fix_plan_markdown(plan: FixPlan, result: ScanResult, version: str = "") -> s
         return " ".join(str(text).split()).replace("|", "\\|")
 
     advisories: dict[str, list[str]] = {}
+    fixed_by: dict[str, str] = {}  # advisory -> its fix version, for partial fixes
     for r in result.results:
         if plan.include_filtered or r.verdict is not Verdict.FILTERED:
             known = advisories.setdefault(_pep503(r.vuln.package), [])
             if r.vuln.cve not in known:
                 known.append(r.vuln.cve)
+            fixed_by[r.vuln.cve] = r.vuln.fix_version or ""
     n = len(plan.included)
     resolver = "Poetry's" if plan.tool == "poetry" else "uv's"
     files = (
@@ -1508,7 +1586,14 @@ def fix_plan_markdown(plan: FixPlan, result: ScanResult, version: str = "") -> s
         "|---|---|---|---|---|",
     ]
     for item in plan.included:
-        ids = _id_list(advisories.get(_pep503(item.package), []))
+        known = advisories.get(_pep503(item.package), [])
+        if item.partial:  # only the advisories this release closes
+            known = [
+                a
+                for a in known
+                if fixed_by.get(a) and version_key(fixed_by[a]) <= version_key(item.version)
+            ]
+        ids = _id_list(known)
         major = " **(major version change)**" if item.major_jump else ""
         lines.append(
             f"| `{cell(item.package)}` | {cell(item.installed or '?')} "
@@ -1614,6 +1699,8 @@ def print_fix_plan(plan: FixPlan, file: Any) -> None:
         own = [e for e in item.edits if _pep503(e.package) == _pep503(item.package)]
         if item.carried:
             how = "moves past the fix with the rest of the plan"
+        elif item.partial:
+            how = f"the newest fix your Python range allows ({item.partial})"
         elif item.python_floor:
             how = f"raise requires-python to >={item.python_floor}, which the fix needs"
         elif item.published:
@@ -1662,11 +1749,18 @@ def print_fix_plan(plan: FixPlan, file: Any) -> None:
     for line in python_floor_lines(plan.python_floor, plan.tool):
         print(f"   {line}" if line else "", file=file)
     if plan.included:
-        verdict = (
-            "all fixes resolve together"
-            if plan.status == "verified"
-            else (f"{len(plan.included)} of {len(plan.items)} fixes resolve together")
-        )
+        partial = sum(1 for i in plan.included if i.partial)
+        packages = len({_pep503(i.package) for i in plan.items})
+        full = len(plan.included) - partial
+        fixes = f"{partial} partial fix{'es' if partial > 1 else ''}"
+        if plan.status == "verified":
+            verdict = "all fixes resolve together"
+        elif full:
+            verdict = f"{full} of {packages} fixes resolve together"
+            verdict += f", plus {fixes} on your current Python range" if partial else ""
+        else:
+            verb = "resolves" if partial == 1 else "resolve together"
+            verdict = f"{fixes} on your current Python range {verb}"
         resolver = "Poetry's" if plan.tool == "poetry" else "uv's"
         print(f"\n   Verified with {resolver} resolver: {verdict}.", file=file)
         print(f"   Then run: {plan.command}", file=file)

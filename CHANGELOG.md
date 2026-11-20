@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Partial fixes on the current Python.** When the full fix needs a newer Python and the
+  floor is not raised, the uv plan adds the newest release that installs on the current
+  `requires-python`, verified with uv alongside the rest, and says how many of the package's
+  alerts it closes (`closes 5 of 8 alerts; the other 3 need Python >=3.11.5`). The pull
+  request description lists only the advisories it closes. Found on a test repository where
+  Dependabot reported "cannot update" for soupsieve while 2.10 installs on Python 3.10.
+
 ## [0.51.1] - 2026-11-20
 
 ### Changed
