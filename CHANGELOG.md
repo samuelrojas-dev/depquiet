@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`--raise-python-floor` works on Poetry projects.** A fix that needs a newer Python was
+  left out with "held below by another requirement", which hid the cause: `poetry update`
+  on a transitive package resolves and keeps the old version. depquiet now requires the fix
+  directly on a copy, reads the Python each release needs from Poetry's error
+  (`soupsieve (4.1.1) requires Python >=3.11.5`), and verifies the raised `requires-python`
+  with Poetry, as the uv plan does. Without the flag the plan reports the option; with it,
+  the diff raises `requires-python`. A `python` constraint in `[tool.poetry.dependencies]`
+  is reported, not rewritten.
+
 ## [0.50.2] - 2026-11-19
 
 ### Fixed

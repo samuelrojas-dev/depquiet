@@ -116,7 +116,7 @@ inputs:
     required: false
     default: "false"
   fix-pr-raise-python-floor:
-    description: "With fix-pr on a uv project: when a fix needs a newer Python than requires-python, raise requires-python in the pull request to what the fix needs (true/false). Drops support for the older Python versions: fine for an application, a breaking change for a published library. Without it, the pull request lists those fixes under Not included."
+    description: "With fix-pr: when a fix needs a newer Python than requires-python, raise requires-python in the pull request to what the fix needs (true/false). Drops support for the older Python versions: fine for an application, a breaking change for a published library. Without it, the pull request lists those fixes under Not included."
     required: false
     default: "false"
   fix-pr-branch:

@@ -695,9 +695,15 @@ With `--raise-python-floor`, the diff changes `requires-python = ">=3.9"` to `">
 (upper bounds such as `<4` are kept; `~=` and `==3.9.*` are left for you to rewrite), and
 `--apply` leaves pytest 9.2.0 as the only copy in `uv.lock`. The target is 9.2.0, not the
 fix's 9.0.0, because the lock already had 9.2.0 for newer Pythons: the plan does not move
-it back down. Workspace members whose own floor is lower are raised too. uv projects only
-for now; on Poetry the `python` constraint is left as it is. The Action's input is
-`fix-pr-raise-python-floor`.
+it back down. Workspace members whose own floor is lower are raised too. The Action's input
+is `fix-pr-raise-python-floor`.
+
+Poetry projects get the same option. `poetry update` on a transitive package resolves and
+quietly keeps the old version, so depquiet requires the fix directly on a copy, reads the
+Python each release needs from Poetry's error (`soupsieve (4.1.1) requires Python
+>=3.11.5`), and verifies the raised `requires-python` with Poetry. A project that also sets
+`python` in `[tool.poetry.dependencies]` gets the floor reported, but not edited: raise both
+by hand.
 
 #### Fixing filtered alerts too (`--fix-filtered`)
 

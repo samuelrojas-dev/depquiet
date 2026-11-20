@@ -13,6 +13,11 @@ temporary copy. Poetry differs from uv in two ways that shape this module:
   version each package actually ends on, and exact pins in ``pyproject.toml``
   keep it exact (a pinned ``requests = "2.31.0"`` becomes the fix version).
 
+When a fix needs a newer Python than ``requires-python`` allows, Poetry
+says so (``soupsieve (4.0.0) requires Python >=3.11.5``) only when the fix is
+required directly, so the plan asks it that way on a copy, then checks the
+raised floor with Poetry exactly as the uv plan does (``--raise-python-floor``).
+
 Dependabot cannot raise a parent package to fix a vulnerable transitive
 dependency in Python projects (dependabot-core#16337), Poetry included.
 """
@@ -28,7 +33,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from depquiet.fixcheck import _pep503, fix_targets
+from depquiet.fixcheck import _lowest_python, _pep503, fix_targets
 from depquiet.fixplan import (
     _CLAUSE,
     _COPY_IGNORE,
@@ -38,14 +43,16 @@ from depquiet.fixplan import (
     LockChange,
     PlanEdit,
     PlanItem,
+    PythonFloor,
     _apply,
     _diff,
+    _floor_edits,
     _requirement_strings,
     _satisfies,
     unique_edits,
     widen,
 )
-from depquiet.models import ScanResult, version_key
+from depquiet.models import ScanResult, Verdict, version_key
 
 _ROUNDS = 3  # how many levels of holders to follow (a holder held by another)
 
@@ -250,7 +257,9 @@ def update_command(names: list[str]) -> list[str]:
     return ["update", "--lock", "--no-interaction", "--no-ansi", *names]
 
 
-def _run_update(root: Path, executable: str, names: list[str], timeout: int) -> tuple[int, str]:
+def _run_update(
+    root: Path, executable: str, names: list[str], timeout: int, limit: int | None = 400
+) -> tuple[int, str]:
     env = {**os.environ, "POETRY_VIRTUALENVS_CREATE": "false", "NO_COLOR": "1"}
     try:
         r = subprocess.run(
@@ -267,7 +276,8 @@ def _run_update(root: Path, executable: str, names: list[str], timeout: int) -> 
         return 1, f"poetry update timed out after {timeout} s"
     except OSError as e:
         return 1, str(e)
-    return r.returncode, " ".join((r.stderr or r.stdout).split())[-400:]
+    text = " ".join((r.stderr or r.stdout).split())
+    return r.returncode, text[-limit:] if limit else text
 
 
 def _copy(project: Path, parent: Path, name: str) -> Path:
@@ -341,10 +351,179 @@ def _plan_one(
     return final, moved
 
 
+# --- the Python floor -------------------------------------------------------------
+
+# "soupsieve (4.1.1) requires Python >=3.11.5": one line per release Poetry tried.
+_REQUIRES_PYTHON = re.compile(
+    r"([A-Za-z0-9][A-Za-z0-9._-]*) \(([^)\s]+)\) requires Python "
+    r"([<>=!~][^\s,]*(?:,[<>=!~][^\s,]*)*)"
+)
+
+
+def _require(root: Path, package: str, version: str) -> bool:
+    """Make ``package>=version`` a direct requirement of the copy at ``root``."""
+    path = root / "pyproject.toml"
+    text = path.read_text(encoding="utf-8")
+    try:
+        data = tomllib.loads(text)
+    except tomllib.TOMLDecodeError:
+        return False
+    lines = text.splitlines(keepends=True)
+    section = ""
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("["):
+            section = stripped.strip("[]").strip()
+            if section == "tool.poetry.dependencies" and not isinstance(
+                (data.get("project") or {}).get("dependencies"), list
+            ):
+                table = (data.get("tool") or {}).get("poetry", {}).get("dependencies") or {}
+                if any(_pep503(n) == _pep503(package) for n in table):
+                    return False
+                lines.insert(i + 1, f'{package} = ">={version}"\n')
+                break
+            continue
+        if section == "project" and re.match(r"\s*dependencies\s*=\s*\[", line):
+            lines[i] = line.replace("[", f'["{package}>={version}", ', 1)
+            break
+    else:
+        return False
+    path.write_text("".join(lines), encoding="utf-8")
+    return True
+
+
+def _python_need(project: Path, work: Path, executable: str, item: PlanItem, timeout: int) -> str:
+    """The lowest Python the fix installs on, when requires-python is what keeps it out.
+
+    ``poetry update`` on a transitive package resolves and quietly keeps the
+    old version, so the fix is required directly on a copy: then Poetry names
+    the Python each release needs. "" when that is not the obstacle.
+    """
+    probe = _copy(project, work, f"python-{_pep503(item.package)}")
+    if not _require(probe, item.package, item.version):
+        return ""
+    code, detail = _run_update(probe, executable, [item.package], timeout, limit=None)
+    if code == 0:
+        return ""
+    floors = [
+        _lowest_python(spec)
+        for name, version, spec in _REQUIRES_PYTHON.findall(detail)
+        if _pep503(name) == _pep503(item.package)
+        and version_key(version) >= version_key(item.version)
+    ]
+    floors = [f for f in floors if f]
+    return min(floors, key=version_key) if floors else ""
+
+
+def _poetry_python(project: Path) -> str:
+    """The ``python`` constraint of ``[tool.poetry.dependencies]``, "" when absent."""
+    try:
+        data = tomllib.loads((project / "pyproject.toml").read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return ""
+    deps = ((data.get("tool") or {}).get("poetry") or {}).get("dependencies") or {}
+    value = deps.get("python", "")
+    return value if isinstance(value, str) else ""
+
+
 def build_poetry_plan(
+    result: ScanResult,
+    project: Path,
+    *,
+    timeout: int = 600,
+    include_filtered: bool = False,
+    raise_python_floor: bool = False,
+) -> FixPlan:
+    """A verified fix plan for a Poetry project (see the module docstring).
+
+    Fixes left out because they need a newer Python get a Python floor option,
+    verified with Poetry on a copy whose requires-python is raised; with
+    ``raise_python_floor`` the plan adopts it.
+    """
+    plan = _build_poetry_plan(result, project, timeout=timeout, include_filtered=include_filtered)
+    blocked = [i for i in plan.items if not i.included and i.why]
+    executable = shutil.which("poetry")
+    if not blocked or executable is None:
+        return plan
+    with tempfile.TemporaryDirectory(prefix="depquiet-floor-") as tmp:
+        work = Path(tmp)
+        floors = {
+            i.package: need
+            for i in blocked
+            if (need := _python_need(project, work, executable, i, timeout))
+        }
+        if not floors:
+            return plan
+        floor = max(floors.values(), key=version_key)
+        edits, dropped, problem = _floor_edits(project, floor)
+        if not problem and _poetry_python(project):
+            problem = (
+                f"pyproject.toml also sets python = {_poetry_python(project)!r} in "
+                "[tool.poetry.dependencies]; depquiet only raises requires-python, so raise "
+                "both by hand."
+            )
+        option = PythonFloor(floor, edits=edits, dropped=dropped, problem=problem)
+        plan.python_floor = option
+        for item in blocked:
+            if item.package in floors:
+                item.why = (
+                    f"needs Python >={floors[item.package]}, and requires-python allows older "
+                    f"versions: raise it to >={floor} (--raise-python-floor checks that)."
+                )
+        if problem:
+            option.still_blocked = list(floors)
+            return plan
+        raised = _copy(project, work, "raised")
+        _apply(raised, edits)
+        trial = _build_poetry_plan(
+            result, raised, timeout=timeout, include_filtered=include_filtered
+        )
+    was = {i.package for i in plan.included}
+    unblocked = [i for i in trial.included if i.package not in was]
+    option.unblocked = [i.package for i in unblocked]
+    option.still_blocked = [p for p in floors if p not in option.unblocked]
+    keys = {_pep503(p) for p in option.unblocked}
+    option.alerts = sum(
+        1
+        for r in result.results
+        if (include_filtered or r.verdict is not Verdict.FILTERED)
+        and _pep503(r.vuln.package) in keys
+    )
+    if not unblocked:
+        return plan
+    if not raise_python_floor:
+        for item in plan.items:
+            if item.package in option.unblocked:
+                wanted = floors.get(item.package)
+                item.why = (
+                    (
+                        f"needs Python >={wanted}"
+                        if wanted
+                        else "does not fit the current Python range"
+                    )
+                    + f": raising requires-python to >={floor} lets it install (verified; "
+                    "--raise-python-floor adds that change to the plan)."
+                )
+        return plan
+    option.adopted = True
+    for item in trial.items:
+        if item.package in option.unblocked:
+            item.python_floor = floor
+    trial.python_floor = option
+    trial.diff = _diff(
+        project, unique_edits([*[e for i in trial.included for e in i.edits], *edits])
+    )
+    trial.note += (
+        f" The plan raises requires-python to >={floor}: users on older Python versions can "
+        "no longer install the project."
+    )
+    return trial
+
+
+def _build_poetry_plan(
     result: ScanResult, project: Path, *, timeout: int = 600, include_filtered: bool = False
 ) -> FixPlan:
-    """A verified fix plan for a Poetry project (see the module docstring)."""
+    """The plan within the project's current requires-python."""
     if not fix_targets(result, include_filtered=include_filtered):
         return FixPlan("none", note=NOTHING_TO_FIX, tool="poetry")
     executable = shutil.which("poetry")

@@ -149,7 +149,7 @@ def plan_fixes(
         bool,
         Field(
             description=(
-                "uv projects: when a fix needs a newer Python than requires-python allows, "
+                "When a fix needs a newer Python than requires-python allows, "
                 "raise requires-python in the plan (checked with the resolver). This drops "
                 "support for older Pythons: ask the user first."
             )

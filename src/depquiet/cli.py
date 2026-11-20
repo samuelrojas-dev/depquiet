@@ -637,9 +637,9 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
     parser.add_argument(
         "--raise-python-floor",
         action="store_true",
-        help="With --fix-plan (uv projects): when a fix needs a newer Python than the "
-        "project's requires-python, raise requires-python in the plan to what the fix needs "
-        "(verified with uv's resolver). Without it, the plan only reports that option. "
+        help="With --fix-plan: when a fix needs a newer Python than the project's "
+        "requires-python, raise requires-python in the plan to what the fix needs (verified "
+        "with uv's or Poetry's resolver). Without it, the plan only reports that option. "
         "Drops support for the older Python versions",
     )
     parser.add_argument(
@@ -946,12 +946,12 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
         elif is_poetry_project(args.path):
             # Poetry has no per-fix dry run to report on: the plan is the check.
             if args.fix_plan is not None:
-                fix_plan = build_poetry_plan(result, args.path, include_filtered=args.fix_filtered)
-                if args.raise_python_floor:
-                    warnings.append(
-                        "depquiet: --raise-python-floor works on uv projects for now; "
-                        "the Poetry plan leaves the Python constraint as it is."
-                    )
+                fix_plan = build_poetry_plan(
+                    result,
+                    args.path,
+                    include_filtered=args.fix_filtered,
+                    raise_python_floor=args.raise_python_floor,
+                )
             else:
                 warnings.append(
                     "depquiet: --check-fixes works on uv projects; for a Poetry project use "
