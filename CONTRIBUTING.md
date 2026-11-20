@@ -110,7 +110,7 @@ src/depquiet/
 
 1. Update tests to cover your changes
 2. Ensure all checks pass (`ruff`, `mypy`, `pytest`)
-3. Update the README if you're adding user-facing features
+3. Update the README (short, user-facing) or the matching page in `docs/` if you're adding user-facing features
 4. Fill out the PR template
 5. A maintainer will review within a few days
 
