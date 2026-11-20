@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Partial fixes on Poetry projects too.** Asked to update a held-back package, Poetry moves
+  it to the newest release that installs on the current Python (soupsieve 2.8.3 → 2.10 on
+  `>=3.10`); the plan keeps that as a partial fix when it closes at least one alert.
+
+### Fixed
+- Versions compare without trailing zeros (`2.10` equals `2.10.0`): Poetry locks soupsieve
+  "2.10" while the advisory says "2.10.0", and the partial fix counted one alert too few.
+
 ## [0.52.0] - 2026-11-20
 
 ### Added

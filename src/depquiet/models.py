@@ -404,10 +404,16 @@ class ScanResult:
 
 
 def version_key(version: str) -> tuple[Any, ...]:
-    """Order release numbers well enough to compare fixes (4.2.1 > 4.0.9)."""
+    """Order release numbers well enough to compare fixes (4.2.1 > 4.0.9).
+
+    Trailing zeros don't count: Poetry locks soupsieve "2.10" while the
+    advisory's fix says "2.10.0", and both are the same release.
+    """
     parts: list[Any] = []
     for piece in re.split(r"[.+-]", version):
         parts.append((0, int(piece)) if piece.isdigit() else (1, piece))
+    while len(parts) > 1 and parts[-1] == (0, 0):
+        parts.pop()
     return tuple(parts)
 
 
