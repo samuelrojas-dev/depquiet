@@ -1,0 +1,58 @@
+name: Python floor index
+
+# Once a month: the most-starred Python repos pushed in the last 30 days, and how
+# many hold an alert that no fixed release reaches on their oldest supported Python.
+# Read-only for the repos measured (it downloads a lock file and pyproject.toml from
+# each and audits the pinned versions); the results arrive as a pull request.
+
+on:
+  schedule:
+    - cron: "23 7 2 * *" # 07:23 UTC on the 2nd
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: python-floor-index
+  cancel-in-progress: false
+
+jobs:
+  index:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    permissions:
+      contents: write # push the results branch
+      pull-requests: write # open the pull request
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - name: Install depquiet from this commit
+        run: pip install . pip-audit packaging
+      - name: Collect and scan the sample
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          month=$(date -u +%Y-%m)
+          since=$(date -u -d '30 days ago' +%Y-%m-%d)
+          echo "MONTH=$month" >> "$GITHUB_ENV"
+          QUERY="stars:>500 pushed:>$since" PAGES=10 LOCKS="uv.lock poetry.lock" \
+            research/2026-11-python-floor/collect.sh "$RUNNER_TEMP/study"
+          python research/index/index.py "$RUNNER_TEMP/study" "research/index/$month" \
+            research/index/history.csv "$month" >> "$GITHUB_STEP_SUMMARY"
+      - name: Open a pull request with the results
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          branch="index/$MONTH"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add research/index
+          git commit -m "docs(research): Python floor index for $MONTH"
+          git push --force origin "$branch"
+          gh pr create --base main --head "$branch" \
+            --title "docs(research): Python floor index for $MONTH" \
+            --body-file "research/index/$MONTH/summary.md"

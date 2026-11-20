@@ -1,0 +1,2 @@
+month,repos_checked,with_lock,uv,poetry,analysed,with_action_alerts,blocked_repos,blocked_share,vulnerable_copies,blocked_copies,action_alerts,blocked_alerts,soupsieve_trap_repos,soupsieve_trap_at_311
+2026-11,1000,266,244,22,261,196,98,50%,2272,256,16082,2910,65,32
