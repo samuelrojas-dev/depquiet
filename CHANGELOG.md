@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.53.0] - 2026-11-20
+
 ### Added
 - **Partial fixes on Poetry projects too.** Asked to update a held-back package, Poetry moves
   it to the newest release that installs on the current Python (soupsieve 2.8.3 → 2.10 on
@@ -1468,7 +1470,8 @@ requirements.txt and npm projects:
 - CI workflow with lint, typecheck, test matrix (3.11/3.12/3.13), and build
 - Automated release workflow with trusted PyPI publishing
 
-[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.52.0...HEAD
+[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.53.0...HEAD
+[0.53.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.52.0...v0.53.0
 [0.52.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.51.1...v0.52.0
 [0.51.1]: https://github.com/samuelrojas-dev/depquiet/compare/v0.51.0...v0.51.1
 [0.51.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.50.2...v0.51.0
