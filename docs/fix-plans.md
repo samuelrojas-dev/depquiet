@@ -164,6 +164,29 @@ Python each release needs from Poetry's error (`soupsieve (4.1.1) requires Pytho
 `python` in `[tool.poetry.dependencies]` gets the floor reported, but not edited: raise both
 by hand.
 
+#### Partial fixes on your current Python
+
+Each advisory has its own fix, so a release that installs on your current Python can still
+close some of a package's alerts. Without `--raise-python-floor`, the uv plan adds the newest
+such release, checked with uv together with the rest of the plan, and says how many alerts
+it closes and what the others need. Real run on
+[depquiet-floor-test](https://github.com/samuelrojas-dev/depquiet-floor-test)
+(`requires-python >=3.10`):
+
+```
+🔧 Fix plan
+   ✓ pillow 12.2.0 → 12.3.0: the newest fix your Python range allows (closes 13 of 55 alerts; the other 42 need Python >=3.11)
+   ✓ soupsieve 2.8.3 → 2.10.0: the newest fix your Python range allows (closes 5 of 8 alerts; the other 3 need Python >=3.11.5)
+   ✗ pillow → 13.0.0: needs a newer Python: see Python floor below
+   ✗ soupsieve → 4.0.0: needs a newer Python: see Python floor below
+```
+
+On the same repository, Dependabot reported "cannot update soupsieve to a non-vulnerable
+version" without naming Python
+([dependabot-core#16987](https://github.com/dependabot/dependabot-core/issues/16987)). With
+`--raise-python-floor` the plan raises the floor instead and adds no partial fix. Poetry
+plans don't add partial fixes yet.
+
 ### Fixing filtered alerts too (`--fix-filtered`)
 
 The plan covers the alerts depquiet shows. A filtered alert (pytest in a `dev` group, say)
