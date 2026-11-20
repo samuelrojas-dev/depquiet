@@ -31,6 +31,33 @@ For those, `requires-python >=3.11` is not enough; `>=3.11.5` is.
 
 Per-copy data: [`blocked_copies.csv`](blocked_copies.csv).
 
+## Larger samples (same day, later)
+
+The same measurement on two bigger samples, now with Poetry projects too (`poetry.lock`,
+Python range from its metadata or `pyproject.toml`). The first sample above is contained in
+the top 1,000.
+
+| | Top 1,000 (>500 stars) | 200 to 500 stars |
+|---|--:|--:|
+| Repos checked (pushed since 20 Oct 2026) | 1,000 | 1,000 |
+| With a lock (uv / Poetry) | 266 (244 / 22) | 257 (220 / 37) |
+| Analysed | 261 | 255 |
+| With at least one *action* alert | 196 | 176 |
+| **With a vulnerable package no fixed release reaches on their lowest Python** | **98 (50%)** | **76 (43%)** |
+| Vulnerable copies blocked by the Python floor | 256 of 2,272 (11%) | 191 of 1,394 (14%) |
+| *Action* alerts blocked by the Python floor | 2,910 of 16,082 (18%) | 2,066 of 10,131 (20%) |
+| soupsieve 3.11.5 trap: repos / already requiring 3.11 | 65 / 32 | 31 / 15 |
+
+The share holds as the sample grows: about half of the projects with alerts have at least
+one that no upgrade can close without dropping a Python version. In the top 1,000, 10 of the
+16 Poetry projects with action alerts are in that group. The second column is reported
+apart on purpose: smaller projects include more that are simply less maintained, where an
+open alert says less about the Python floor.
+
+Data: [`blocked_copies_top1000.csv`](blocked_copies_top1000.csv),
+[`blocked_copies_200_500_stars.csv`](blocked_copies_200_500_stars.csv), and the repo lists
+`repos_top1000.txt` and `repos_200_500_stars.txt`.
+
 ## Method
 
 1. The 300 most-starred Python repos with more than 1,000 stars, pushed since 1 November
@@ -43,7 +70,8 @@ Per-copy data: [`blocked_copies.csv`](blocked_copies.csv).
    installs on the project's lowest supported Python (the `>=` bound of the lock's
    `requires-python`, or the pinned version for `==3.12.*`-style projects).
 
-Reproduce: `collect.sh`, then `analyze.py` and `summarize.py` (all read-only).
+Reproduce: `collect.sh` (its header has the commands for each sample), which runs
+`analyze.py` and `summarize.py`. All read-only.
 
 ## Limits
 

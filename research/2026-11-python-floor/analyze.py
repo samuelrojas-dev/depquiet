@@ -50,10 +50,28 @@ def stable(v: str) -> bool:
         return False
 
 
+def project_python(folder: Path) -> str:
+    """The project's Python range: uv.lock's requires-python, else Poetry's."""
+    try:
+        if (folder / "uv.lock").exists():
+            return tomllib.loads((folder / "uv.lock").read_text()).get("requires-python", "")
+        meta = tomllib.loads((folder / "poetry.lock").read_text()).get("metadata", {})
+        if meta.get("python-versions"):
+            return meta["python-versions"]
+        data = tomllib.loads((folder / "pyproject.toml").read_text())
+        return (data.get("project") or {}).get("requires-python") or (
+            ((data.get("tool") or {}).get("poetry") or {}).get("dependencies") or {}
+        ).get("python", "")
+    except Exception:
+        return ""
+
+
 def floor_of(spec: str) -> str:
     found = re.findall(r">=\s*(\d+(?:\.\d+){0,2})", spec or "")
     # Applications often pin one Python: "==3.12.*" starts at 3.12.0, "==3.14.7" at 3.14.7.
     found += re.findall(r"==\s*(\d+\.\d+(?:\.\d+)?)(?:\.\*)?", spec or "")
+    # Poetry: "^3.10" and "~3.10" start at 3.10.
+    found += re.findall(r"[\^~]\s*(\d+\.\d+(?:\.\d+)?)", spec or "")
     return max(found, key=Version) if found else ""
 
 
@@ -84,11 +102,7 @@ for scan in sorted((ROOT / "scans").glob("*.json")):
         data = json.loads(scan.read_text())
     except json.JSONDecodeError:
         continue
-    lock = ROOT / "repos" / name / "uv.lock"
-    try:
-        rp = tomllib.loads(lock.read_text()).get("requires-python", "")
-    except Exception:
-        rp = ""
+    rp = project_python(ROOT / "repos" / name)
     floor = floor_of(rp)
     if not floor:
         continue
