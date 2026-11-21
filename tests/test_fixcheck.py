@@ -74,6 +74,8 @@ def _project(tmp_path: Path) -> Path:
 def _fake_uv(calls: list[list[str]], *, filelock_shown: bool = False):
     def run(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
         calls.append(cmd)
+        if "--upgrade-package" not in cmd:  # the no-upgrade baseline: the project locks
+            return subprocess.CompletedProcess(cmd, 0, "", "")
         spec = cmd[cmd.index("--upgrade-package") + 1]
         if spec.startswith("oauthlib"):
             return subprocess.CompletedProcess(cmd, 1, "", OAUTHLIB)
@@ -114,7 +116,10 @@ def test_resolver_answers_are_attached(tmp_path: Path) -> None:
     ):
         checks, note = check_fixes(result, project)
     assert note == ""
-    assert all(c[1:4] == ["lock", "--dry-run", "--upgrade-package"] for c in calls)
+    # Nothing resolved, so one baseline `uv lock --dry-run` checks the project locks at all.
+    assert [c[1:] for c in calls if "--upgrade-package" not in c] == [["lock", "--dry-run"]]
+    upgrades = [c for c in calls if "--upgrade-package" in c]
+    assert all(c[1:4] == ["lock", "--dry-run", "--upgrade-package"] for c in upgrades)
     oauth, otel = checks["oauthlib"], checks["opentelemetry-api"]
     assert oauth.status == otel.status == "blocked"
     assert oauth.detail.startswith("`oauthlib` was filtered by `exclude-newer-package`")

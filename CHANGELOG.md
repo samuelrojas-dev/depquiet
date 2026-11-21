@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- When no fix resolves, `--check-fixes` and `--fix-plan` check whether the project locks at
+  all without upgrades. If it does not, they say so once ("uv cannot lock this project as it
+  is, even without upgrades") instead of listing uv's error under every fix as if it were
+  about that fix. Found on python-telegram-bot, whose own `all` extra does not resolve on
+  its declared Pythons.
+
 ## [0.54.0] - 2026-11-21
 
 ### Added
