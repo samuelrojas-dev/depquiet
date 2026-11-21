@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.56.2] - 2026-11-21
+
 ### Fixed
 - npm plans: advisories bounded by prereleases (`>=15.0.0-canary.0 <15.5.30`, seen for next,
   electron and semver) made every release look vulnerable, so the plan said "no published
@@ -1536,7 +1538,8 @@ requirements.txt and npm projects:
 - CI workflow with lint, typecheck, test matrix (3.11/3.12/3.13), and build
 - Automated release workflow with trusted PyPI publishing
 
-[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.56.1...HEAD
+[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.56.2...HEAD
+[0.56.2]: https://github.com/samuelrojas-dev/depquiet/compare/v0.56.1...v0.56.2
 [0.56.1]: https://github.com/samuelrojas-dev/depquiet/compare/v0.56.0...v0.56.1
 [0.56.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.55.0...v0.56.0
 [0.55.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.54.0...v0.55.0
