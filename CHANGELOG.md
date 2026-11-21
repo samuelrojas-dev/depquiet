@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.56.0] - 2026-11-21
+
 ### Added
 - **`--fix-plan` and `--apply` for npm projects** (`package.json` with a `package-lock.json`
   v2 or v3), verified with npm on a temporary copy (`npm update --package-lock-only
@@ -1510,7 +1512,8 @@ requirements.txt and npm projects:
 - CI workflow with lint, typecheck, test matrix (3.11/3.12/3.13), and build
 - Automated release workflow with trusted PyPI publishing
 
-[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.55.0...HEAD
+[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.56.0...HEAD
+[0.56.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.55.0...v0.56.0
 [0.55.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.54.0...v0.55.0
 [0.54.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.53.0...v0.54.0
 [0.53.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.52.0...v0.53.0
