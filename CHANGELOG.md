@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- npm plans no longer include a major upgrade of the project's own dependency. When every
+  fixed release is on a newer major line, that copy is left, with the jump named
+  ("electron 33.2.1, your own dependency (devDependencies: ^33.2.1): every fixed release is
+  on a newer major line (42.11.16 and up)…"). 0.56.2 widened upscayl's electron from
+  ^33.2.1 to ^42.11.16. The package's other copies are still fixed.
+
 ## [0.56.2] - 2026-11-21
 
 ### Fixed
