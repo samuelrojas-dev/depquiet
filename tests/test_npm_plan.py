@@ -402,3 +402,37 @@ def test_the_version_shown_is_what_the_vulnerable_copy_became(tmp_path, monkeypa
     plan, _ = _plan(tmp_path, monkeypatch, _finding("minimatch", "<3.0.5"), entries=entries)
     [item] = plan.included
     assert item.version == "3.1.5"
+
+
+def test_prerelease_bounds_do_not_hide_every_release() -> None:
+    """next, electron, semver advisories (upscayl, nodemon, 2026-11-21)."""
+    ranges = [">=15.0.0-canary.0 <15.5.30", ">=15.2.0-canary.0 <15.2.6", "<=15.5.28"]
+    assert fixed_release("15.5.29", ranges, ["15.5.29", "15.5.30", "16.0.0"]) == "15.5.30"
+    semver = [">=2.0.0-alpha <5.7.2", ">=7.0.0 <7.5.2", ">=6.0.0 <6.3.1"]
+    assert not npmplan._vulnerable("6.3.2", semver)
+    assert npmplan._vulnerable("6.3.0", semver)
+    assert npmplan._vulnerable("4.0.0", semver)
+    assert npmplan._for_stable(">=33.0.0-alpha.1 <=39.8.5-beta.2") == ">=33.0.0 <39.8.5"
+
+
+def test_an_existing_nested_override_is_named_not_rewritten(tmp_path, monkeypatch) -> None:
+    """OpenHands: overrides typed-rest-client > qs = 6.15.3, still inside an advisory."""
+    entries = {
+        "node_modules/typed-rest-client": ("2.3.1", {"qs": "6.15.1"}),
+        "node_modules/qs": ("6.15.3", {}),
+    }
+    monkeypatch.setitem(RELEASES, "qs", ["6.15.3", "6.16.1"])
+    extra = {"overrides": {"typed-rest-client": {"qs": "6.15.3"}}}
+    plan, _ = _plan(
+        tmp_path,
+        monkeypatch,
+        _finding("qs", ">=2.2.5 <6.16.0"),
+        entries=entries,
+        root={"typed-rest-client": "2.3.1"},
+        extra=extra,
+    )
+    [item] = plan.left_out
+    assert item.why == (
+        "your package.json already overrides qs under typed-rest-client to 6.15.3; "
+        "6.16.1 is the lowest fixed release: raise it there"
+    )

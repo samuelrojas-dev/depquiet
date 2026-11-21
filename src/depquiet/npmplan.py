@@ -107,8 +107,35 @@ def _line(version: str) -> tuple[int, ...]:
     return (major,) if major else (0, minor) if minor else (0, 0, patch)
 
 
+_PRE_BOUND = re.compile(r"(>=|<=|>|<)\s*(\d+\.\d+\.\d+)-[0-9A-Za-z.-]+")
+
+
+def _for_stable(rng: str) -> str:
+    """Rewrite prerelease bounds into stable ones, exact for stable versions.
+
+    Advisories for next, electron and semver bound their ranges with
+    prereleases (``>=15.0.0-canary.0 <15.5.30``), which the range matcher reports
+    as "unknown". The plan then took every release for vulnerable and said "no
+    published release is outside the advisories" (upscayl, nodemon,
+    2026-11-21). For a stable version v and a prerelease X-pre, which sorts
+    just below X: v >= X-pre and v > X-pre both mean v >= X; v < X-pre and
+    v <= X-pre both mean v < X.
+    """
+
+    def repl(m: re.Match[str]) -> str:
+        op = ">=" if m.group(1) in (">=", ">") else "<"
+        return f"{op}{m.group(2)}"
+
+    return _PRE_BOUND.sub(repl, rng)
+
+
 def _vulnerable(version: str, ranges: list[str]) -> bool:
-    return any(match_npm_range(version, r)[0] != "not_matched" for r in ranges)
+    """Whether a version is inside any advisory range; unknown counts as inside."""
+    stable = bool(_STABLE.match(version))
+    return any(
+        match_npm_range(version, _for_stable(r) if stable else r)[0] != "not_matched"
+        for r in ranges
+    )
 
 
 def fixed_release(installed: str, ranges: list[str], releases: list[str]) -> str:
@@ -355,6 +382,15 @@ def _plan_package(
                 return item, {}, {}, {}
             if name in existing and not isinstance(existing[name], dict):
                 item.why = f"your package.json already overrides {name} to {existing[name]}"
+                return item, {}, {}, {}
+            nested = existing.get(parent)
+            if isinstance(nested, dict) and isinstance(nested.get(name), str):
+                # OpenHands (2026-11-21) pins qs under typed-rest-client to 6.15.3,
+                # itself inside an advisory: say so instead of rewriting their choice.
+                item.why = (
+                    f"your package.json already overrides {name} under {parent} to "
+                    f"{nested[name]}; {target} is the lowest fixed release: raise it there"
+                )
                 return item, {}, {}, {}
             if parent in existing and not isinstance(existing[parent], dict):
                 item.why = (
