@@ -25,6 +25,7 @@ RELEASES = {
     "minimatch": ["3.0.4", "3.0.5", "3.1.5", "9.0.0"],
     "qs": ["6.11.0", "6.16.2"],
     "left-pad": ["1.0.0"],
+    "glob": ["10.3.10", "10.5.0", "14.0.2"],
 }
 
 
@@ -99,7 +100,14 @@ def _fake_npm(monkeypatch, *, fail: bool = False) -> list[list[str]]:
         if pin:
             packages["node_modules/postcss-selector-parser"] = {"version": pin}
         if "minimatch" in args and "node_modules/minimatch" in packages:
+            # Like npm 9.2 in upscayl: only the hoisted copy moves (never a bundled one).
             packages["node_modules/minimatch"] = {"version": "3.1.5"}
+        for parent, pins in overrides.items():
+            if isinstance(pins, dict):
+                for dep, version in pins.items():
+                    nested = f"node_modules/{parent}/node_modules/{dep}"
+                    if nested in packages:
+                        packages[nested] = {"version": version}
         (cwd / "package-lock.json").write_text(json.dumps(lock), encoding="utf-8")
         return 0, ""
 
@@ -274,3 +282,123 @@ def test_apply_writes_the_manifest_and_restores_on_failure(tmp_path, monkeypatch
 )
 def test_requirement_keeps_its_operator(declared, expected) -> None:
     assert npmplan._keep_operator(declared, "1.4.0") == expected
+
+
+def test_a_bundled_copy_is_named_not_chased(tmp_path, monkeypatch) -> None:
+    """nodemon (2026-11-21): npm 11.10.1 ships minimatch 10.2.2 inside its own tarball."""
+    entries = {
+        "node_modules/minimatch": ("3.0.4", {}),
+        "node_modules/glob": ("7.2.0", {"minimatch": "^3.0.4"}),
+        "node_modules/npm": ("11.10.1", {"minimatch": "^3.0.4"}),
+        "node_modules/npm/node_modules/minimatch": ("3.0.4", {}),
+    }
+    project = _project(tmp_path, entries=entries, root={"glob": "7.2.0", "npm": "11.10.1"})
+    lock = json.loads((project / "package-lock.json").read_text(encoding="utf-8"))
+    lock["packages"]["node_modules/npm/node_modules/minimatch"]["inBundle"] = True
+    (project / "package-lock.json").write_text(json.dumps(lock), encoding="utf-8")
+    _fake_npm(monkeypatch)
+    plan = build_npm_plan(_result(_finding("minimatch", "<3.0.5")), project, releases=_releases)
+    [item] = plan.included
+    assert item.held_by == [
+        "minimatch 3.0.4 is bundled inside npm 11.10.1: only a new release of npm can change it"
+    ]
+    assert not any(e.kind == "override" for e in item.edits)
+
+
+def test_only_bundled_copies_are_left_out_with_the_reason(tmp_path, monkeypatch) -> None:
+    entries = {
+        "node_modules/npm": ("11.10.1", {}),
+        "node_modules/npm/node_modules/minimatch": ("3.0.4", {}),
+    }
+    project = _project(tmp_path, entries=entries, root={"npm": "11.10.1"})
+    lock = json.loads((project / "package-lock.json").read_text(encoding="utf-8"))
+    lock["packages"]["node_modules/npm/node_modules/minimatch"]["inBundle"] = True
+    (project / "package-lock.json").write_text(json.dumps(lock), encoding="utf-8")
+    _fake_npm(monkeypatch)
+    plan = build_npm_plan(_result(_finding("minimatch", "<3.0.5")), project, releases=_releases)
+    [item] = plan.left_out
+    assert item.why.startswith("minimatch 3.0.4 is bundled inside npm 11.10.1")
+
+
+def test_a_nested_copy_npm_update_leaves_gets_an_override_within_range(
+    tmp_path, monkeypatch
+) -> None:
+    """upscayl (npm 9.2, 2026-11-21): eslint accepts minimatch ^3.0.4; its 3.1.2 stayed."""
+    entries = {
+        "node_modules/eslint": ("8.57.0", {"minimatch": "^3.0.4"}),
+        "node_modules/eslint/node_modules/minimatch": ("3.0.4", {}),
+        "node_modules/minimatch": ("9.0.0", {}),
+    }
+    plan, _ = _plan(
+        tmp_path,
+        monkeypatch,
+        _finding("minimatch", "<3.0.5"),
+        entries=entries,
+        root={"eslint": "8.57.0"},
+    )
+    [item] = plan.included
+    assert [(e.kind, e.scope, e.new) for e in item.edits] == [("override", "eslint", "3.0.5")]
+    assert item.held_by == [
+        "eslint 8.57.0 accepts the fix, but npm update left minimatch 3.0.4 under it"
+    ]
+
+
+def test_no_override_across_a_major_version(tmp_path, monkeypatch) -> None:
+    """upscayl: every fixed glob is 14.x; @next/eslint-plugin-next pins 10.3.10 exactly."""
+    entries = {
+        "node_modules/@next/eslint-plugin-next": ("14.2.7", {"glob": "10.3.10"}),
+        "node_modules/glob": ("10.3.10", {}),
+    }
+    plan, _ = _plan(
+        tmp_path,
+        monkeypatch,
+        _finding("glob", ">=9.0.0 <=14.0.1"),
+        entries=entries,
+        root={"@next/eslint-plugin-next": "14.2.7"},
+    )
+    [item] = plan.left_out
+    assert "on a newer major line (14.0.2 and up)" in item.why
+    assert "upgrading @next/eslint-plugin-next is the fix" in item.why
+    assert plan.diff == ""
+
+
+def test_a_cross_major_copy_is_left_while_the_others_are_fixed(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """upscayl: minimatch 3.x and 9.x copies have same-line fixes; one 10.x copy needs 11.x."""
+    import sys
+
+    entries = {
+        "node_modules/eslint": ("8.57.0", {"minimatch": "^3.0.4"}),
+        "node_modules/eslint/node_modules/minimatch": ("3.0.4", {}),
+        "node_modules/app-builder-lib": ("25.1.8", {"minimatch": "^10.0.0"}),
+        "node_modules/app-builder-lib/node_modules/minimatch": ("10.0.1", {}),
+    }
+    monkeypatch.setitem(RELEASES, "minimatch", ["3.0.4", "3.0.5", "10.0.1", "10.2.0", "11.0.1"])
+    finding = _finding("minimatch", "<3.0.5 || >=7.0.0 <11.0.1")
+    plan, _ = _plan(
+        tmp_path,
+        monkeypatch,
+        finding,
+        entries=entries,
+        root={"eslint": "8.57.0", "app-builder-lib": "25.1.8"},
+    )
+    [item] = plan.included
+    assert item.version == "3.0.5"  # what the fixed copy became
+    assert [(e.scope, e.new) for e in item.edits] == [("eslint", "3.0.5")]
+    assert item.leaves.startswith("minimatch 10.0.1 under app-builder-lib 25.1.8: every fixed")
+    print_fix_plan(plan, sys.stdout)
+    assert "(it leaves minimatch 10.0.1 under app-builder-lib 25.1.8" in capsys.readouterr().out
+    assert plan.to_dict()["included"][0]["leaves"] == item.leaves
+
+
+def test_the_version_shown_is_what_the_vulnerable_copy_became(tmp_path, monkeypatch) -> None:
+    """upscayl's yaml 1.10.2 read "→ 2.9.1" because an unrelated 2.x copy was in the lock."""
+    entries = {
+        **BASE,
+        "node_modules/foo": ("1.0.0", {"minimatch": "^9.0.0"}),
+        "node_modules/foo/node_modules/minimatch": ("9.0.0", {}),
+    }
+    plan, _ = _plan(tmp_path, monkeypatch, _finding("minimatch", "<3.0.5"), entries=entries)
+    [item] = plan.included
+    assert item.version == "3.1.5"
