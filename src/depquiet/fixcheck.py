@@ -101,8 +101,46 @@ def _alert_targets(result: ScanResult, *, include_filtered: bool = False) -> lis
     return pairs
 
 
+_BUILD = re.compile(r"Failed to build `([^`]+)`")
+
+
+def _build_failure(stderr: str) -> str:
+    """Which package uv could not build, and the build's last error line ("" if none).
+
+    uv's own hint ("Build failures usually indicate a problem with the package or
+    the build environment") names neither. When the package is the project itself
+    or a local path dependency (``name @ file://...``), uv had to build it from
+    source to read its metadata: with a dynamic version, a checkout without the
+    source tree cannot even be locked. Seen on faraday, infinigen and wagtail
+    (2026-11-20) with only pyproject.toml and uv.lock present.
+    """
+    match = _BUILD.search(stderr)
+    if not match:
+        return ""
+    target = re.sub(r"[\s│]+", " ", match.group(1)).strip()
+    name = target.split(" @ ")[0].strip()
+    last = ""
+    for line in stderr.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("hint:"):
+            break
+        if stripped and not stripped.startswith(("[stdout]", "[stderr]")):
+            last = stripped
+    cause = f" Its last error: {clip(last, 200)}" if last else ""
+    if "file://" in target:
+        return (
+            f"uv could not build {name} (the project itself or a local path dependency), "
+            "which it needs to read its metadata: check that `uv lock` works in a full "
+            f"checkout of the project.{cause}"
+        )
+    return f"uv could not build {name} from source.{cause}"
+
+
 def _explain(stderr: str) -> str:
     """uv's ``hint:`` lines first (the actionable part), then its ``cause:`` lines."""
+    built = _build_failure(stderr)
+    if built:
+        return built
     hints: list[str] = []
     causes: list[str] = []
     current: list[str] | None = None
