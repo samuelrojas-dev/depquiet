@@ -89,6 +89,12 @@ On a public uv SDK with 71 open Dependabot alerts and `requires-python = ">=3.9"
 Its maintainers had reached the same "raise the floor and relock" change by hand, as had
 the maintainers of another uv project whose Dependabot pytest update had failed four times.
 
+**Merged upstream:** in [beets](https://github.com/beetbox/beets/pull/7202), a dependency
+update had left the soupsieve alerts open, because uv kept a vulnerable soupsieve for
+Python 3.11.0–3.11.4. The fix depquiet points to, `requires-python = ">=3.11.5"` and one
+soupsieve (4.1.3) in the lock, was reviewed and merged by the beets maintainers on
+21 November 2026. pip-audit counts 4 soupsieve advisories before and 0 after.
+
 Across 18 uv projects (2026-11-12), uv's resolver rejected the nearest fix for 502 of 991
 kept alerts (51%); in 81% of the blocked upgrades, a pin in the project's own
 `pyproject.toml` was in the way ([study](https://github.com/samuelrojas-dev/depquiet/blob/main/docs/fix-plans.md#can-the-fix-be-installed---check-fixes)).
