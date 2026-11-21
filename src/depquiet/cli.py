@@ -42,6 +42,7 @@ from depquiet.fixplan import (
     apply_fix_plan,
     build_fix_plan,
     fix_plan_markdown,
+    lockfile_name,
     print_fix_plan,
     stale_exemptions,
 )
@@ -50,6 +51,7 @@ from depquiet.ignore import apply_ignores, load_ignore, print_ignore_warnings
 from depquiet.kev import KevCatalog, apply_kev, fetch_kev_catalog, load_kev_from_file
 from depquiet.license import LicenseReport, print_license_report, scan_licenses
 from depquiet.models import ScanResult
+from depquiet.npmplan import build_npm_plan, is_npm_project
 from depquiet.output import print_scan_result
 from depquiet.parsers.osv import parse_lockfiles
 from depquiet.parsers.sbom import SbomParser
@@ -493,7 +495,7 @@ def main(argv: list[str] | None = None) -> int:
   depquiet                          scan the project in this directory
   depquiet --json                   machine-readable report
   depquiet --check-fixes            uv: can each fix be installed, and what blocks it
-  depquiet --fix-plan plan.diff     uv, Poetry: one verified pyproject.toml change for all fixes
+  depquiet --fix-plan plan.diff     uv, Poetry, npm: one verified change for all fixes
   depquiet --fix-plan --apply       uv, Poetry: apply that change and relock (restored on failure)
   depquiet --fix-plan --raise-python-floor  uv: also raise requires-python when a fix needs it
   depquiet --fail-on high           fail CI on high or critical ACTION alerts
@@ -943,6 +945,15 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
         flag = "--fix-plan" if args.fix_plan is not None else "--check-fixes"
         if merged.offline:
             warnings.append(f"depquiet: {flag} needs network access; skipped (--offline).")
+        elif is_npm_project(args.path):
+            # npm: the plan is the check, verified with npm on a copy.
+            if args.fix_plan is not None:
+                fix_plan = build_npm_plan(result, args.path, include_filtered=args.fix_filtered)
+            else:
+                warnings.append(
+                    "depquiet: --check-fixes works on uv projects; for an npm project use "
+                    "--fix-plan, which verifies the fixes with npm on a copy."
+                )
         elif is_poetry_project(args.path):
             # Poetry has no per-fix dry run to report on: the plan is the check.
             if args.fix_plan is not None:
@@ -1041,7 +1052,7 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
                     file=sys.stderr,
                 )
         if args.apply and fix_plan.included:
-            lockfile = "poetry.lock" if fix_plan.tool == "poetry" else "uv.lock"
+            lockfile = lockfile_name(fix_plan.tool)
             problem = apply_fix_plan(fix_plan, args.path)
             if problem:
                 print(f"Error: --apply: {problem}", file=sys.stderr)

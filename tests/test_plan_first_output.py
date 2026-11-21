@@ -52,3 +52,21 @@ def test_without_a_plan_every_alert_is_listed(capsys) -> None:
     print_scan_result(_result())
     out = capsys.readouterr().out
     assert out.count("fix check:") == 7 and "Fix checks for" not in out
+
+
+def test_a_fix_in_the_parent_names_the_parent(capsys) -> None:
+    """npm audit's fix for postcss-selector-parser was "@tailwindcss/typography 0.5.4"."""
+    row = TriageResult(
+        vuln=Vulnerability(
+            "GHSA-psp",
+            "postcss-selector-parser",
+            "<6.1.5",
+            Severity.HIGH,
+            fix_version="0.5.4",
+            fix_package="@tailwindcss/typography",
+        ),
+        verdict=Verdict.ACTION,
+    )
+    print_scan_result(ScanResult(".", "npm", 1, [row]), plan_follows=True)
+    out = capsys.readouterr().out
+    assert "postcss-selector-parser  1 alert  FIX: update @tailwindcss/typography to 0.5.4" in out

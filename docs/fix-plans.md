@@ -262,6 +262,63 @@ and `botocore = "1.29.0"`:
   as left out, with the reason.
 - No `exclude-newer` handling: that is a uv setting.
 
+### npm projects
+
+`--fix-plan` and `--apply` work on npm projects (a `package.json` and a `package-lock.json`
+version 2 or 3), verified with npm itself on a temporary copy: `npm update
+--package-lock-only --ignore-scripts`, so no install script runs and the project is not
+touched. Real run with npm 10.9 on an own project with express 4.19.2, glob 7.2.0 (minimatch
+3.0.4) and @tailwindcss/typography 0.5.19, 2026-11-21:
+
+```
+🔧 Fix plan
+   ✓ body-parser 1.20.2 → 1.20.9: also move express → 4.22.3, which holds it back
+   ✓ express 4.19.2 → 4.22.3: widen your requirement
+   ✓ minimatch 3.0.4 → 3.1.5: upgrade
+   ✓ postcss-selector-parser 6.0.10 → 6.1.5: override it under @tailwindcss/typography
+     (@tailwindcss/typography 0.5.19 requires postcss-selector-parser@6.0.10)
+     (instead of what npm audit offers: npm audit fix --force would move @tailwindcss/typography back from 0.5.19 to 0.5.4)
+   …
+   Verified with npm's resolver: all fixes resolve together.
+```
+```diff
+-    "express": "4.19.2",
++    "express": "4.22.3",
+     "@tailwindcss/typography": "0.5.19",
+     "tailwindcss": "3.4.17"
++  },
++  "overrides": {
++    "@tailwindcss/typography": {
++      "postcss-selector-parser": "6.1.5"
++    }
+```
+
+npm audit reported 9 vulnerable packages before and 0 after `--apply`. How the plan is
+built, in two rounds:
+
+1. **Within semver.** `npm update` for every vulnerable package, plus npm audit's own fix
+   when it is a plain upgrade of a parent (newer, same major line). When your
+   `package.json` pins that parent, the plan widens the pin.
+2. **Overrides, only for what is still vulnerable.** The plan reads, from the lock round 1
+   produced, which package holds each vulnerable copy and with what range. It picks the
+   lowest fixed release on the installed version's own line (`^` semantics; 0.x stays on
+   its minor). It then adds an `overrides` entry scoped to that parent, so nothing else
+   moves. Each override is verified as it is added, then all of them together.
+
+When npm audit's only fix is a semver-major change, the plan says so, and says when that
+change is a downgrade. In a pilot of 153 popular lockfiles, 221 of 399 such fixes were
+downgrades ([npm pilot](../research/2026-11-npm-pilot/README.md)).
+
+Limits:
+
+- An override installs a version its parent did not declare. It is on the same line as the
+  vulnerable one when such a release exists, but only your tests can say the parent works with it.
+- Not yet: workspaces that declare the vulnerable package themselves (the plan names the
+  workspace to change), pnpm and yarn lockfiles, `fix-pr`, and `--check-fixes` (for npm, the
+  plan is the check).
+- An existing override of the same package or parent is never rewritten: that fix is
+  left out, with the reason.
+
 ### One pull request with every fix that installs (`fix-pr`)
 
 `--fix-plan --apply` applies the verified plan to the project: it edits the requirements

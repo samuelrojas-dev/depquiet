@@ -79,6 +79,14 @@ _COPY_IGNORE = shutil.ignore_patterns(
 )
 
 
+def lockfile_name(tool: str) -> str:
+    return {"poetry": "poetry.lock", "npm": "package-lock.json"}.get(tool, "uv.lock")
+
+
+def resolver_name(tool: str) -> str:
+    return {"poetry": "Poetry's", "npm": "npm's"}.get(tool, "uv's")
+
+
 @dataclass
 class PlanEdit:
     """One change in one file, before and after.
@@ -93,6 +101,8 @@ class PlanEdit:
     old: str
     new: str
     kind: str = "requirement"
+    # npm ``override``: the parent the override is scoped to ("" for a global one).
+    scope: str = ""
 
 
 @dataclass
@@ -115,6 +125,10 @@ class PlanItem:
     # Set on the newest fix that installs on the current Python range, when the
     # full fix needs a newer Python: "closes 5 of 8 alerts; 3 need Python >=3.11.5".
     partial: str = ""
+    # npm: who holds the vulnerable copy back ("typography 0.5.19 requires
+    # postcss-selector-parser@6.0.10"), and npm audit's own fix when it is a downgrade.
+    held_by: list[str] = field(default_factory=list)
+    audit_note: str = ""
 
     @property
     def major_jump(self) -> bool:
@@ -202,6 +216,8 @@ class FixPlan:
     # lockfile diff, so the plan names them.
     lock_changes: list[LockChange] = field(default_factory=list)
     python_floor: PythonFloor | None = None
+    # npm: the whole planned package.json, written by --apply.
+    manifest: str = ""
 
     @property
     def downgrades(self) -> list[LockChange]:
@@ -250,6 +266,15 @@ class FixPlan:
 
     @property
     def command(self) -> str:
+        if self.tool == "npm":
+            packages = list(
+                dict.fromkeys(
+                    n
+                    for i in self.included
+                    for n in [i.package, *[s.split("==")[0] for s in i.also_upgrade]]
+                )
+            )
+            return "npm update " + " ".join(packages) if packages else ""
         if self.tool == "poetry":
             names: list[str] = []
             for item in self.included:
@@ -291,11 +316,20 @@ class FixPlan:
                         else None
                     ),
                     "edits": [e.__dict__ for e in i.edits],
+                    "held_by": i.held_by,
+                    "npm_audit_note": i.audit_note or None,
                 }
                 for i in self.included
             ],
             "left_out": [
-                {"package": i.package, "version": i.version, "why": i.why} for i in self.left_out
+                {
+                    "package": i.package,
+                    "version": i.version,
+                    "why": i.why,
+                    "held_by": i.held_by,
+                    "npm_audit_note": i.audit_note or None,
+                }
+                for i in self.left_out
             ],
             "lock_changes": [
                 {"package": c.package, "from": c.old or None, "to": c.new or None}
@@ -1530,7 +1564,11 @@ def apply_fix_plan(plan: FixPlan, project: Path, *, timeout: int = 900) -> str:
     leaves the project half-changed.
     """
     tool = plan.tool
-    lockfile = "poetry.lock" if tool == "poetry" else "uv.lock"
+    if tool == "npm":
+        from depquiet.npmplan import apply_npm_plan
+
+        return apply_npm_plan(plan, project, timeout=timeout)
+    lockfile = lockfile_name(tool)
     executable = shutil.which(tool)
     if executable is None:
         return f"{tool} is not on PATH."
@@ -1593,6 +1631,9 @@ def _how(item: PlanItem) -> str:
     if item.also_upgrade:
         moved = ", ".join(f"`{s.replace('==', '` → ')}" for s in item.also_upgrade)
         return f"also moves {moved}, which held it back"
+    overrides = [e.scope for e in item.edits if e.kind == "override"]
+    if overrides:
+        return f"`overrides` scoped to {', '.join(f'`{o}`' for o in overrides)}, which pins it"
     if own:
         return "widens the project's own requirement"
     return "lockfile upgrade"
@@ -1620,12 +1661,11 @@ def fix_plan_markdown(plan: FixPlan, result: ScanResult, version: str = "") -> s
                 known.append(r.vuln.cve)
             fixed_by[r.vuln.cve] = r.vuln.fix_version or ""
     n = len(plan.included)
-    resolver = "Poetry's" if plan.tool == "poetry" else "uv's"
-    files = (
-        "`pyproject.toml` requirements and `poetry.lock`"
-        if plan.tool == "poetry"
-        else "`pyproject.toml`/`uv.toml` requirements and `uv.lock`"
-    )
+    resolver = resolver_name(plan.tool)
+    files = {
+        "poetry": "`pyproject.toml` requirements and `poetry.lock`",
+        "npm": "`package.json` (requirements and `overrides`) and `package-lock.json`",
+    }.get(plan.tool, "`pyproject.toml`/`uv.toml` requirements and `uv.lock`")
     if plan.python_floor is not None and plan.python_floor.adopted:
         requirements = any(e.kind != "python" for i in plan.included for e in i.edits)
         files = (
@@ -1657,7 +1697,7 @@ def fix_plan_markdown(plan: FixPlan, result: ScanResult, version: str = "") -> s
             f"| {cell(item.version)}{major} | {cell(ids)} | {cell(_how(item))} |"
         )
     if plan.lock_changes:
-        lockfile = "poetry.lock" if plan.tool == "poetry" else "uv.lock"
+        lockfile = lockfile_name(plan.tool)
         lines += ["", f"### Other changes in `{lockfile}`", ""]
         lines += [f"- {cell(c.describe())}" for c in plan.lock_changes]
         if plan.downgrade_warning():
@@ -1795,6 +1835,9 @@ def print_fix_plan(plan: FixPlan, file: Any) -> None:
         elif item.also_upgrade:
             moved = ", ".join(s.replace("==", " → ") for s in item.also_upgrade)
             how = f"also move {moved}, which holds it back"
+        elif any(e.kind == "override" for e in item.edits):
+            scopes = ", ".join(e.scope for e in item.edits if e.kind == "override")
+            how = f"override it under {scopes}"
         elif own:
             how = "widen your requirement"
         else:
@@ -1803,6 +1846,10 @@ def print_fix_plan(plan: FixPlan, file: Any) -> None:
             f"   ✓ {item.package} {item.installed or '?'} → {item.version}: {how}{jump}",
             file=file,
         )
+        for held in item.held_by:
+            print(f"     ({held})", file=file)
+        if item.audit_note:
+            print(f"     (instead of what npm audit offers: {item.audit_note})", file=file)
         if item.carried:
             print(
                 f"     (asking for {item.fixed_in or item.version} itself did not resolve; "
@@ -1820,9 +1867,9 @@ def print_fix_plan(plan: FixPlan, file: Any) -> None:
         why = item.why
         if floor is not None and not floor.adopted and item.package in floor.unblocked:
             why = "needs a newer Python: see Python floor below"
-        print(f"   ✗ {item.package} → {item.version}: {clip(why, 200)}", file=file)
+        print(f"   ✗ {item.package} → {item.version or '?'}: {clip(why, 200)}", file=file)
     if plan.lock_changes:
-        lockfile = "poetry.lock" if plan.tool == "poetry" else "uv.lock"
+        lockfile = lockfile_name(plan.tool)
         print(f"\n   It also changes {lockfile}:", file=file)
         for change in plan.lock_changes:
             print(f"     · {change.describe()}", file=file)
@@ -1843,7 +1890,7 @@ def print_fix_plan(plan: FixPlan, file: Any) -> None:
         else:
             verb = "resolves" if partial == 1 else "resolve together"
             verdict = f"{fixes} on your current Python range {verb}"
-        resolver = "Poetry's" if plan.tool == "poetry" else "uv's"
+        resolver = resolver_name(plan.tool)
         print(f"\n   Verified with {resolver} resolver: {verdict}.", file=file)
         print(f"   Then run: {plan.command}", file=file)
         print(f"   {plan.note}", file=file)

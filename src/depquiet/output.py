@@ -199,9 +199,15 @@ def _print_by_package(action: list[Any]) -> None:
         groups.setdefault(r.vuln.package, []).append(r)
     for package, rows in groups.items():
         ids = [r.vuln.cve for r in rows]
-        fixes = [r.vuln.fix_version for r in rows if r.vuln.fix_version]
-        highest = max(fixes, key=version_key) if fixes else ""
-        fix_str = f"  FIX: update to {highest}" if highest else ""
+        # npm audit's fix for a transitive package is often a version of the parent
+        # that pulls it in: name that package, or "update to 0.5.4" reads as a
+        # version of this one (postcss-selector-parser 6.0.10 → "0.5.4").
+        fixes = [
+            (r.vuln.fix_package or package, r.vuln.fix_version) for r in rows if r.vuln.fix_version
+        ]
+        target, highest = max(fixes, key=lambda f: version_key(f[1])) if fixes else ("", "")
+        named = f"{target} " if target != package else ""
+        fix_str = f"  FIX: update {named}to {highest}" if highest else ""
         noun = _count(len(rows), "alert")
         kev = [r.vuln.cve for r in rows if getattr(r, "kev_entry", None) is not None]
         kev_str = f"  {_c(_RED, 'KNOWN EXPLOITED: ' + ', '.join(kev))}" if kev else ""
