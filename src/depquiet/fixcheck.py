@@ -23,6 +23,7 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -435,11 +436,43 @@ def check_fixes(
                 answers[pair] = checks[package]
             else:
                 answers[pair] = check_fix(project, package, version, project_names=names)
+    note = ""
+    if not any(c.status == "resolves" for c in answers.values()):
+        note = _baseline(project, answers.values())
     for finding in result.results:
         pair = (finding.vuln.package, finding.vuln.fix_version)
         if pair in answers and (include_filtered or finding.verdict != Verdict.FILTERED):
             finding.fix_check = answers[pair]
-    return checks, ""
+    return checks, note
+
+
+def _baseline(project: Path, checks: Iterable[FixCheck], timeout: int = 300) -> str:
+    """When no fix resolves: does the project lock at all without upgrades?
+
+    python-telegram-bot (2026-11-20) did not: uv reported the project's own
+    ``all`` extra as unsatisfiable on its declared Pythons, so every fix came
+    back "blocked" for a reason no upgrade could change. One extra
+    ``uv lock --dry-run``, only when nothing resolved, tells the two apart.
+    """
+    executable = shutil.which("uv")
+    if executable is None:
+        return ""
+    answer = _run_lock(project, executable, [], timeout)
+    if isinstance(answer, str):
+        return ""
+    code, stdout, stderr = answer
+    if code == 0:
+        return ""
+    why = _explain(stderr or stdout)
+    for check in checks:
+        check.status = "error"
+        check.reason = ""
+        check.next_step = ""
+        check.detail = f"the project does not lock as it is, even without upgrades: {why}"
+    return (
+        "uv cannot lock this project as it is, even without upgrades, so no fix could be "
+        f"judged. Run `uv lock` in the project and fix that first. uv says: {clip(why, 300)}"
+    )
 
 
 def _project_names(project: Path) -> set[str]:
