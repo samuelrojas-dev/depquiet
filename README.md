@@ -69,8 +69,11 @@ version change above all, is for your tests to say.
   for that package and only up to the fix release.
 - **Fixing one package moves another one back:** the plan marks it with ⚠ instead of
   calling the plan done.
+- **npm: a parent pins the vulnerable version.** When `npm audit fix --force` would move
+  the parent back (@tailwindcss/typography 0.5.19 → 0.5.4), the plan adds an `overrides`
+  entry scoped to that parent, on the fixed package's own line, and verifies it with npm.
 - **One pull request:** the Action's `fix-pr` input opens a single pull request with every
-  fix that installs, and lists the ones that don't, with the reason.
+  fix that installs (uv and Poetry), and lists the ones that don't, with the reason.
 
 Every case, with real runs: [Fix plans](https://github.com/samuelrojas-dev/depquiet/blob/main/docs/fix-plans.md).
 
