@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`--fix-plan` and `--apply` for npm projects** (`package.json` with a `package-lock.json`
+  v2 or v3), verified with npm on a temporary copy (`npm update --package-lock-only
+  --ignore-scripts`). Round 1 takes what npm can do within semver, including npm audit's own
+  fix when it is a plain upgrade of a parent. Round 2 adds an `overrides` entry, scoped to
+  the parent that pins a vulnerable copy, for what is still vulnerable, on the fixed
+  package's own major line. The plan says when npm audit's only fix is semver-major, and
+  when that fix is a downgrade (`npm audit fix --force` would move
+  @tailwindcss/typography back from 0.5.19 to 0.5.4). On an own fixture, npm audit went from
+  9 vulnerable packages to 0.
+
+### Fixed
+- The report grouped by package named the wrong package when npm audit's fix is a version of
+  the parent: "postcss-selector-parser … FIX: update to 0.5.4" now reads "FIX: update
+  @tailwindcss/typography to 0.5.4".
+
 ## [0.55.0] - 2026-11-21
 
 ### Fixed

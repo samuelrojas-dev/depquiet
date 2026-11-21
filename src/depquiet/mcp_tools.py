@@ -30,14 +30,14 @@ TRIAGE_DESCRIPTION = (
 
 PLAN_DESCRIPTION = (
     "Work out the change that closes a project's action alerts and check it with the "
-    "project's own resolver (uv lock --dry-run, or Poetry) on a temporary copy. Returns the "
-    "requirement edits as a unified diff, the lock command to run, every version the lock "
-    "moves (downgrades included), the alerts left out and why, and whether raising "
-    "requires-python would unblock more fixes. Use it after triage_alerts reports action "
-    "alerts; only uv and Poetry projects get a plan (for others it explains why there is "
-    "none). Read-only: never edits or relocks the project; show the user the plan and apply "
-    "the diff only when they agree. Needs network access, and resolving can build source "
-    "distributions and take a few minutes on large projects."
+    "project's own resolver (uv lock --dry-run, Poetry, or npm) on a temporary copy. "
+    "Returns the requirement edits as a unified diff, the lock command to run, every "
+    "version the lock moves (downgrades included), the alerts left out and why, and whether"
+    " raising requires-python would unblock more fixes. Use it after triage_alerts reports "
+    "action alerts; only uv, Poetry and npm (package-lock.json) projects get a plan (for "
+    "others it explains why there is none). Read-only: never edits or relocks the project; "
+    "show the user the plan and apply the diff only when they agree. Needs network access, "
+    "and resolving can build source distributions and take a few minutes on large projects."
 )
 
 Path = Annotated[
@@ -100,7 +100,7 @@ class PlanResult(TypedDict):
             dict[str, Any],
             Field(
                 description=(
-                    "The plan: status, tool (uv or poetry), command, note, included (packages "
+                    "The plan: status, tool (uv, poetry or npm), command, note, included (packages "
                     "the plan fixes, with target versions and edits), left_out (with why), "
                     "lock_changes (from/to) and python_floor."
                 )
