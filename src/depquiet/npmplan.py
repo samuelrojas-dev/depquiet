@@ -249,6 +249,37 @@ def _audit_fixes(
     return found
 
 
+def _bundler(packages: dict[str, dict[str, Any]], key: str) -> str:
+    """ "npm 11.10.1" for a copy shipped inside that package's tarball (``inBundle``)."""
+    base = key
+    while (cut := base.rfind("/node_modules/")) > 0:
+        base = base[:cut]
+        info = packages.get(base) or {}
+        if not info.get("inBundle"):
+            return f"{_name(base, info)} {info.get('version', '?')}"
+    return "its parent"
+
+
+def _bundled_notes(packages: dict[str, dict[str, Any]], name: str, ranges: list[str]) -> list[str]:
+    """Vulnerable copies shipped inside another package: only its next release changes them."""
+    notes = []
+    for key, info in packages.items():
+        if (
+            key
+            and info.get("inBundle")
+            and _name(key, info) == name
+            and _vulnerable(str(info.get("version")), ranges)
+        ):
+            bundler = _bundler(packages, key)
+            note = (
+                f"{name} {info['version']} is bundled inside {bundler}: only a new release of "
+                f"{bundler.split(' ')[0]} can change it"
+            )
+            if note not in notes:
+                notes.append(note)
+    return notes
+
+
 def _plan_package(
     name: str,
     ranges: list[str],
@@ -257,19 +288,23 @@ def _plan_package(
     releases: Releases,
 ) -> tuple[PlanItem, dict[str, dict[str, str]], dict[tuple[str, str], str]]:
     """One package: the item, the overrides it needs, and root requirement changes."""
-    copies = [
-        (key, info["version"])
+    found_copies = [
+        (key, info["version"], bool(info.get("inBundle")))
         for key, info in packages.items()
         if key
         and _name(key, info) == name
         and isinstance(info.get("version"), str)
         and _vulnerable(info["version"], ranges)
     ]
+    copies = [(key, version) for key, version, bundled in found_copies if not bundled]
     item = PlanItem(package=name, version="")
     overrides: dict[str, dict[str, str]] = {}
     requirements: dict[tuple[str, str], str] = {}
+    item.held_by = _bundled_notes(packages, name, ranges)
     if not copies:
-        item.why = "no vulnerable copy in package-lock.json"
+        item.why = (
+            "; ".join(item.held_by) if item.held_by else "no vulnerable copy in package-lock.json"
+        )
         return item, overrides, requirements
     item.installed = ", ".join(sorted({v for _, v in copies}, key=version_key))
     found = manifest.get("overrides")
@@ -282,8 +317,11 @@ def _plan_package(
             return item, {}, {}
         targets.append(target)
         for holder, declared in _holders(packages, name, key):
-            if match_npm_range(target, declared)[0] == "matched":
-                continue
+            # Round 1's `npm update` left this copy vulnerable even though the holder's
+            # range admits the fix (minimatch 3.1.2 under eslint in upscayl, npm 9.2,
+            # 2026-11-21; npm 10.9 moved a nested copy on an own fixture). An override
+            # pinned inside that range moves it and asks nothing the holder did not allow.
+            within = match_npm_range(target, declared)[0] == "matched"
             if holder == "":
                 section = next(
                     (s for s in _ROOT_KEYS if name in (manifest.get(s) or {})), "dependencies"
@@ -291,6 +329,14 @@ def _plan_package(
                 requirements[(section, name)] = _keep_operator(declared, target)
                 continue
             parent = _name(holder, packages[holder])
+            parent_version = packages[holder].get("version", "?")
+            if not within and _line(target) != _line(version):
+                item.why = (
+                    f"every fixed release of {name} is on a newer major line ({target} and "
+                    f"up), outside what {parent} {parent_version} requires ({declared}): an "
+                    f"override across a major version is not safe; upgrading {parent} is the fix"
+                )
+                return item, {}, {}
             if "node_modules/" not in holder:  # a workspace package declares it
                 item.why = (
                     f"workspace {holder} requires {name}@{declared}: change it there "
@@ -307,7 +353,12 @@ def _plan_package(
                 )
                 return item, {}, {}
             overrides.setdefault(parent, {})[name] = target
-            held = f"{parent} {packages[holder].get('version', '?')} requires {name}@{declared}"
+            held = (
+                f"{parent} {parent_version} accepts the fix, but npm update left {name} "
+                f"{version} under it"
+                if within
+                else f"{parent} {parent_version} requires {name}@{declared}"
+            )
             if held not in item.held_by:
                 item.held_by.append(held)
     item.version = max(targets, key=version_key)
@@ -349,10 +400,12 @@ def build_npm_plan(
     audit_fixes = _audit_fixes(result, packages)
 
     def vulnerable_copies(lock: dict[str, dict[str, Any]], name: str) -> list[str]:
+        """Copies the plan can change: bundled ones ship inside their parent's tarball."""
         return [
             f"{name} {info['version']}"
             for key, info in lock.items()
             if key
+            and not info.get("inBundle")
             and _name(key, info) == name
             and _vulnerable(str(info.get("version")), ranges[name])
         ]
@@ -387,8 +440,9 @@ def build_npm_plan(
             {c.split(" ", 1)[1] for c in vulnerable_copies(packages, name)}, key=version_key
         )
         item.installed = ", ".join(found)
+        item.held_by = _bundled_notes(packages, name, ranges[name])
         if not found:
-            item.why = "no vulnerable copy in package-lock.json"
+            item.why = "; ".join(item.held_by) or "no vulnerable copy in package-lock.json"
 
     # Round 1: within semver.
     requirements: dict[tuple[str, str], str] = {}
