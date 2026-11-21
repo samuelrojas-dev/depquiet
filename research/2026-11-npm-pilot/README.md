@@ -32,6 +32,39 @@ semver-major cases: 71 have a same-line fix, 375 only a fix on a newer line, 41 
 release; the other 1,022 are vulnerable only through a dependency (npm audit lists the
 parent too).
 
+## Checked on real projects
+
+After `--fix-plan` for npm shipped, it was run on four of the projects above, in a
+disposable VM on 21 November 2026 (depquiet 0.56.1, npm 9.2, `--fix-filtered` so that
+development-only alerts count too). Each project was cloned shallow; the plan was applied
+to that clone with `--apply`, and npm audit run before and after.
+
+| Project | npm audit vulnerable packages, before → after | Fixed / left out |
+|---|--:|--:|
+| upscayl | 49 → 21 | 25 / 8 |
+| nodemon | 64 → 48 | 18 / 13 |
+| OpenHands | 25 → 15 | 9 / 2 |
+| mathjs | 16 → 14 | 3 / 5 |
+| **Total** | **154 → 98** | **55 / 28** |
+
+No package moved to an older version, and no override crossed a major version. What was
+left out, by reason:
+
+- **Bundled inside another package's tarball** (`inBundle`): nodemon's dependency on npm
+  11.10.1 ships glob, tar, sigstore, pacote and others; only a new npm release changes them.
+- **Every fixed release is on a newer major line, below a parent's pin**: for example
+  diff 1.4.0 under mocha 2.5.3 (2016), tough-cookie 2.4.3 under request, and glob
+  10.3.10 under @next/eslint-plugin-next. The plan names the parent to upgrade.
+- **No fixed release published**: request 2.88.0 and extract-zip 2.0.1.
+- **The project's own override pins a vulnerable version**: OpenHands overrides qs under
+  typed-rest-client to 6.15.3, which is inside an advisory.
+
+Two of the reasons the plan gave were wrong, and are fixed since. Advisories bounded by
+prereleases (`>=15.0.0-canary.0 <15.5.30`, for next, electron and semver) made every
+release look vulnerable, so the plan reported "no fixed release" for next 15.5.29 and
+electron 33.4.11, and flagged semver 6.3.2, which no advisory covers. And the qs case was
+reported as "npm still locks" instead of naming the project's own override.
+
 ## Method
 
 1. GitHub search: the 200 most-starred TypeScript and 200 most-starred JavaScript repos with

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- npm plans: advisories bounded by prereleases (`>=15.0.0-canary.0 <15.5.30`, seen for next,
+  electron and semver) made every release look vulnerable, so the plan said "no published
+  release … is outside the advisories" and flagged versions no advisory covers (semver
+  6.3.2). Prerelease bounds are now read exactly for stable versions.
+- npm plans: an existing override of the same package under the same parent is named
+  ("your package.json already overrides qs under typed-rest-client to 6.15.3; 6.16.1 is the
+  lowest fixed release: raise it there") instead of being rewritten or reported as "npm
+  still locks".
+
 ## [0.56.1] - 2026-11-21
 
 ### Fixed
