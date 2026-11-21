@@ -14,3 +14,10 @@ microsoft/data-formulator,>=3.11,2.8.4,split,soupsieve 4.0 resolves by locking b
 infobyte/faraday,>=3.11,2.8.3,not checked,uv had to build the project itself; only pyproject.toml and uv.lock were downloaded
 princeton-vl/infinigen,==3.11.*,2.10,not checked,uv had to build the project itself; only pyproject.toml and uv.lock were downloaded
 wagtail/wagtail,>=3.11,2.10,not checked,uv had to build the project itself; only pyproject.toml and uv.lock were downloaded
+pydantic/pydantic,>=3.11,2.9,confirmed,no fixed soupsieve resolves on >=3.11; >=3.11.5 resolves (shallow clone)
+PrefectHQ/prefect,">=3.11, <3.16",2.10,split,soupsieve 4.0 resolves by locking beautifulsoup4 4.6.3 next to 4.14.3; >=3.11.5 avoids the split
+vectorize-io/hindsight,>=3.11,2.10,split,soupsieve 4.0 resolves by locking beautifulsoup4 4.6.3 next to 4.14.2 and markdownify 0.6.4 next to 1.2.2; >=3.11.5 avoids the split
+python-telegram-bot/python-telegram-bot,>=3.11,2.10,not checked,the project does not lock as it is: uv reports its all extra (sphinx 9.2.0 needs Python 3.13) as unsatisfiable
+apache/airflow,>=3.11,2.10,not checked,uv reports a pyspark conflict unrelated to Python
+microsoft/graphrag,">=3.11, <3.14",2.9.2,not checked,the lock points to a private package index (HTTP 404)
+mlflow/mlflow,>=3.11,2.10,no longer action,depquiet files the soupsieve alerts as filtered in the full checkout (action in the lock-only snapshot)
