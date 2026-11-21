@@ -60,6 +60,54 @@ Data: [`blocked_copies_top1000.csv`](blocked_copies_top1000.csv),
 
 Monthly follow-up: [the Python floor index](../index/README.md).
 
+## Checked with the resolver
+
+The figures above come from PyPI metadata. To test the strongest claim, that projects
+already requiring Python 3.11 still cannot take a fixed soupsieve, 15 of the 32 such
+projects in the top 1,000 were run through uv's resolver with depquiet 0.53.0
+(`--fix-plan --raise-python-floor`, which runs `uv lock` on temporary copies), in a
+disposable VM on 20 November 2026. The other 17 were left out: 15 are uv workspaces or use
+local path sources, which need the full checkout, and 2 no longer had the lock. All 15 still
+locked a vulnerable soupsieve (2.8.3 to 2.10).
+
+| Result | Repos |
+|---|--:|
+| Confirmed: no fixed soupsieve resolves on `>=3.11`; `>=3.11.5` does | 9 |
+| uv resolves soupsieve 4.0 anyway, by splitting the lock | 3 |
+| Not checked: uv had to build the project itself | 3 |
+
+**Confirmed:** manim, skyvern, Horizon, beets, bbot, litestar, spotify-downloader, serena,
+private-gpt. In serena and private-gpt the floor unblocks soupsieve while other fixes in the
+plan stay blocked.
+
+**Split lock (the claim was too strong here):** uv kept `requires-python >=3.11` and locked,
+for the oldest Pythons, an old release of a package that does not depend on soupsieve at
+all, so soupsieve is not installed there:
+
+- NVIDIA warp: beautifulsoup4 4.6.3 (August 2018) next to 4.15.0.
+- data-formulator: beautifulsoup4 4.6.3 next to 4.14.3, and yfinance 0.1.96 next to 1.5.1.
+- FinanceDatabase: yfinance 0.1.96 (December 2022, before yfinance depended on
+  beautifulsoup4) next to 1.4.1.
+
+So an upgrade *can* close those alerts without dropping a Python, at the price of very old
+releases of other packages on the oldest Pythons. Whether that is acceptable is the project's
+call; it is not the clean fix the metadata count assumed. depquiet's fix plan now says when
+a fix fits only this way and which floor avoids it
+([Fix plans](../../docs/fix-plans.md)).
+
+**Not checked:** faraday, infinigen, wagtail. Only `pyproject.toml` and `uv.lock` were
+downloaded, and uv needed the source tree to read the project's own metadata.
+
+Read the headline figures with this in mind: "no fixed release installs on the lowest
+Python" holds by construction, but in 3 of the 12 projects the resolver could judge, the
+alert could still close through a split lock. The 13 projects named in the 3.11.5 trap
+paragraph above were not among the split cases: 5 were confirmed (manim, skyvern, serena,
+spotify-downloader, private-gpt), wagtail could not be checked, and 7 were not run.
+
+Per-repo results: [`resolver_check.csv`](resolver_check.csv). Script:
+[`resolver_check.sh`](resolver_check.sh) (it runs `uv lock` on third-party projects: use a
+disposable machine).
+
 ## Method
 
 1. The 300 most-starred Python repos with more than 1,000 stars, pushed since 1 November
@@ -80,15 +128,17 @@ Reproduce: `collect.sh` (its header has the commands for each sample), which run
 - Advisories come from pip-audit, not from GitHub's Dependabot; the two databases mostly
   agree but are not identical.
 - "Blocked" is read from PyPI metadata, not from a resolver run: a project can still close
-  such an alert with an environment marker, by vendoring, or by dropping the dependency.
+  such an alert with an environment marker, by vendoring, or by dropping the dependency, and
+  uv can close it by splitting the lock (3 of 12 projects in the
+  [resolver check](#checked-with-the-resolver)).
   For the project's other Pythons the fix may already be locked (a forked lock); the alert
   stays open because the old copy still serves the oldest Pythons.
 - Counting alerts weighs heavily toward packages with many advisories (pillow); the
   per-copy figures are the fairer measure.
 - One snapshot of default branches on one day.
 - This is a measurement, not a criticism of any project: supporting older Pythons is a
-  legitimate choice. The point is that no upgrade tool can close these alerts without
-  someone deciding to drop those Pythons.
+  legitimate choice. The point is that these alerts do not close cleanly without someone
+  deciding to drop those Pythons.
 
 ## Why it matters for depquiet
 

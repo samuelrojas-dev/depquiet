@@ -1,0 +1,16 @@
+repo,lock_requires_python,soupsieve_locked,result,detail
+ManimCommunity/manim,>=3.11,2.9,confirmed,no fixed soupsieve resolves on >=3.11; >=3.11.5 resolves
+Skyvern-AI/skyvern,">=3.11, <3.15",2.10,confirmed,no fixed soupsieve resolves on >=3.11; >=3.11.5 resolves
+Thysrael/Horizon,>=3.11,2.8.3,confirmed,no fixed soupsieve resolves on >=3.11; >=3.11.5 resolves
+beetbox/beets,">=3.11, <3.16",2.10,confirmed,no fixed soupsieve resolves on >=3.11; >=3.11.5 resolves
+blacklanternsecurity/bbot,">=3.11, <3.16",2.10,confirmed,no fixed soupsieve resolves on >=3.11; >=3.11.5 resolves
+litestar-org/litestar,>=3.11,2.9,confirmed,no fixed soupsieve resolves on >=3.11; >=3.11.5 resolves
+spotDL/spotify-downloader,">=3.11, <3.16",2.10,confirmed,no fixed soupsieve resolves on >=3.11; >=3.11.5 resolves
+oraios/serena,">=3.11, <3.15",2.8.4,confirmed,>=3.11.5 unblocks soupsieve; other fixes in the plan stay blocked (status partial)
+zylon-ai/private-gpt,==3.11.*,2.8.3,confirmed,>=3.11.5 unblocks soupsieve; other fixes in the plan stay blocked (status partial)
+JerBouma/FinanceDatabase,">=3.11, <3.16",2.8.4,split,soupsieve 4.0 resolves by locking yfinance 0.1.96 (2022; no beautifulsoup4 dependency) next to 1.4.1
+NVIDIA/warp,>=3.11,2.10,split,soupsieve 4.0 resolves by locking beautifulsoup4 4.6.3 (2018; no soupsieve dependency) next to 4.15.0
+microsoft/data-formulator,>=3.11,2.8.4,split,soupsieve 4.0 resolves by locking beautifulsoup4 4.6.3 next to 4.14.3 and yfinance 0.1.96 next to 1.5.1
+infobyte/faraday,>=3.11,2.8.3,not checked,uv had to build the project itself; only pyproject.toml and uv.lock were downloaded
+princeton-vl/infinigen,==3.11.*,2.10,not checked,uv had to build the project itself; only pyproject.toml and uv.lock were downloaded
+wagtail/wagtail,>=3.11,2.10,not checked,uv had to build the project itself; only pyproject.toml and uv.lock were downloaded
