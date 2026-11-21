@@ -129,6 +129,8 @@ class PlanItem:
     # postcss-selector-parser@6.0.10"), and npm audit's own fix when it is a downgrade.
     held_by: list[str] = field(default_factory=list)
     audit_note: str = ""
+    # npm: copies of the package the plan leaves, and why ("glob 10.5.0 under ...").
+    leaves: str = ""
 
     @property
     def major_jump(self) -> bool:
@@ -318,6 +320,7 @@ class FixPlan:
                     "edits": [e.__dict__ for e in i.edits],
                     "held_by": i.held_by,
                     "npm_audit_note": i.audit_note or None,
+                    "leaves": i.leaves or None,
                 }
                 for i in self.included
             ],
@@ -1615,6 +1618,11 @@ def apply_fix_plan(plan: FixPlan, project: Path, *, timeout: int = 900) -> str:
 
 
 def _how(item: PlanItem) -> str:
+    text = _how_change(item)
+    return f"{text}; it leaves {item.leaves}" if item.leaves else text
+
+
+def _how_change(item: PlanItem) -> str:
     own = [e for e in item.edits if _pep503(e.package) == _pep503(item.package)]
     if item.carried:
         return "moves past the fix with the rest of the plan"
@@ -1850,6 +1858,8 @@ def print_fix_plan(plan: FixPlan, file: Any) -> None:
             print(f"     ({held})", file=file)
         if item.audit_note:
             print(f"     (instead of what npm audit offers: {item.audit_note})", file=file)
+        if item.leaves:
+            print(f"     (it leaves {item.leaves})", file=file)
         if item.carried:
             print(
                 f"     (asking for {item.fixed_in or item.version} itself did not resolve; "

@@ -313,6 +313,15 @@ Limits:
 
 - An override installs a version its parent did not declare. It is on the same line as the
   vulnerable one when such a release exists, but only your tests can say the parent works with it.
+- Never an override across a major version. When every fixed release is on a newer major
+  line and a parent pins the copy below it (upscayl: every fixed glob is 14.x, and
+  @next/eslint-plugin-next pins 10.3.10), the plan leaves that copy, names the parent to
+  upgrade, and still fixes the package's other copies.
+- Copies bundled inside another package (`inBundle`, like the minimatch that npm 11.10.1
+  ships in its own tarball) are named, not chased: only a new release of that package
+  changes them.
+- By default the plan covers *action* alerts. Alerts in development-only packages are
+  *filtered* and need `--fix-filtered`; npm audit counts them all.
 - Not yet: workspaces that declare the vulnerable package themselves (the plan names the
   workspace to change), pnpm and yarn lockfiles, `fix-pr`, and `--check-fixes` (for npm, the
   plan is the check).

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- npm plans, from the first runs on real projects (OpenHands, nodemon, mathjs, upscayl; npm
+  9.2, 2026-11-21):
+  - Copies bundled inside another package (`inBundle`, like the minimatch npm 11.10.1 ships)
+    are named instead of reported as "npm still locks", and do not block the fix.
+  - A copy that `npm update` left vulnerable although its parent's range admits the fix now
+    gets an override inside that range.
+  - No override across a major version: such a copy is left, with the parent to upgrade
+    named, and the package's other copies are still fixed (shown as "it leaves …").
+  - The version shown is what the vulnerable copies became: upscayl's yaml 1.10.2 read
+    "→ 2.9.1" because an unrelated 2.x copy was in the lock.
+
 ## [0.56.0] - 2026-11-21
 
 ### Added

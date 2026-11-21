@@ -286,8 +286,15 @@ def _plan_package(
     packages: dict[str, dict[str, Any]],
     manifest: dict[str, Any],
     releases: Releases,
-) -> tuple[PlanItem, dict[str, dict[str, str]], dict[tuple[str, str], str]]:
-    """One package: the item, the overrides it needs, and root requirement changes."""
+) -> tuple[PlanItem, dict[str, dict[str, str]], dict[tuple[str, str], str], dict[str, str]]:
+    """One package: the item, its overrides, root requirement changes, copies it leaves.
+
+    A copy is left (with the reason) when its only fixed releases are on a newer
+    major line and a parent pins it below: upscayl, 2026-11-21, where every fixed
+    glob is 14.x and @next/eslint-plugin-next pins 10.3.10. The package's other
+    copies still get their fix.
+    """
+    skipped: dict[str, str] = {}
     found_copies = [
         (key, info["version"], bool(info.get("inBundle")))
         for key, info in packages.items()
@@ -305,7 +312,7 @@ def _plan_package(
         item.why = (
             "; ".join(item.held_by) if item.held_by else "no vulnerable copy in package-lock.json"
         )
-        return item, overrides, requirements
+        return item, overrides, requirements, skipped
     item.installed = ", ".join(sorted({v for _, v in copies}, key=version_key))
     found = manifest.get("overrides")
     existing: dict[str, Any] = found if isinstance(found, dict) else {}
@@ -314,8 +321,10 @@ def _plan_package(
         target = fixed_release(version, ranges, releases(name))
         if not target:
             item.why = f"no published release of {name} above {version} is outside the advisories"
-            return item, {}, {}
-        targets.append(target)
+            return item, {}, {}, {}
+        copy_overrides: dict[str, str] = {}
+        copy_requirements: dict[tuple[str, str], str] = {}
+        copy_held: list[str] = []
         for holder, declared in _holders(packages, name, key):
             # Round 1's `npm update` left this copy vulnerable even though the holder's
             # range admits the fix (minimatch 3.1.2 under eslint in upscayl, npm 9.2,
@@ -326,43 +335,54 @@ def _plan_package(
                 section = next(
                     (s for s in _ROOT_KEYS if name in (manifest.get(s) or {})), "dependencies"
                 )
-                requirements[(section, name)] = _keep_operator(declared, target)
+                copy_requirements[(section, name)] = _keep_operator(declared, target)
                 continue
             parent = _name(holder, packages[holder])
             parent_version = packages[holder].get("version", "?")
             if not within and _line(target) != _line(version):
-                item.why = (
-                    f"every fixed release of {name} is on a newer major line ({target} and "
-                    f"up), outside what {parent} {parent_version} requires ({declared}): an "
-                    f"override across a major version is not safe; upgrading {parent} is the fix"
+                skipped[key] = (
+                    f"{name} {version} under {parent} {parent_version}: every fixed release is "
+                    f"on a newer major line ({target} and up), outside what {parent} requires "
+                    f"({declared}); an override across a major version is not safe, upgrading "
+                    f"{parent} is the fix"
                 )
-                return item, {}, {}
+                break
             if "node_modules/" not in holder:  # a workspace package declares it
                 item.why = (
                     f"workspace {holder} requires {name}@{declared}: change it there "
                     f"to allow {target}"
                 )
-                return item, {}, {}
+                return item, {}, {}, {}
             if name in existing and not isinstance(existing[name], dict):
                 item.why = f"your package.json already overrides {name} to {existing[name]}"
-                return item, {}, {}
+                return item, {}, {}, {}
             if parent in existing and not isinstance(existing[parent], dict):
                 item.why = (
                     f"{parent} holds {name}@{declared}, and your package.json already "
                     f"overrides {parent} itself"
                 )
-                return item, {}, {}
-            overrides.setdefault(parent, {})[name] = target
+                return item, {}, {}, {}
+            copy_overrides[parent] = target
             held = (
                 f"{parent} {parent_version} accepts the fix, but npm update left {name} "
                 f"{version} under it"
                 if within
                 else f"{parent} {parent_version} requires {name}@{declared}"
             )
-            if held not in item.held_by:
-                item.held_by.append(held)
+            if held not in copy_held:
+                copy_held.append(held)
+        if key in skipped:
+            continue
+        targets.append(target)
+        for parent, value in copy_overrides.items():
+            overrides.setdefault(parent, {})[name] = value
+        requirements.update(copy_requirements)
+        item.held_by += [h for h in copy_held if h not in item.held_by]
+    if not targets:
+        item.why = "; ".join(skipped.values())
+        return item, {}, {}, skipped
     item.version = max(targets, key=version_key)
-    return item, overrides, requirements
+    return item, overrides, requirements, skipped
 
 
 def build_npm_plan(
@@ -399,16 +419,22 @@ def build_npm_plan(
     ranges = _ranges(result, include_filtered)
     audit_fixes = _audit_fixes(result, packages)
 
-    def vulnerable_copies(lock: dict[str, dict[str, Any]], name: str) -> list[str]:
-        """Copies the plan can change: bundled ones ship inside their parent's tarball."""
+    skipped: dict[str, dict[str, str]] = {}  # package -> copies it leaves, with why
+
+    def vulnerable_keys(lock: dict[str, dict[str, Any]], name: str) -> list[str]:
+        """Copies the plan can change: not bundled, not left for a parent upgrade."""
         return [
-            f"{name} {info['version']}"
+            key
             for key, info in lock.items()
             if key
             and not info.get("inBundle")
+            and key not in skipped.get(name, {})
             and _name(key, info) == name
             and _vulnerable(str(info.get("version")), ranges[name])
         ]
+
+    def vulnerable_copies(lock: dict[str, dict[str, Any]], name: str) -> list[str]:
+        return [f"{name} {lock[k]['version']}" for k in vulnerable_keys(lock, name)]
 
     def edited(
         requirements: dict[tuple[str, str], str], overrides: dict[str, dict[str, str]]
@@ -435,6 +461,7 @@ def build_npm_plan(
             return "", _packages(root)
 
     items = {name: PlanItem(package=name, version="") for name in sorted(ranges)}
+    original_keys = {name: vulnerable_keys(packages, name) for name in items}
     for name, item in items.items():
         found = sorted(
             {c.split(" ", 1)[1] for c in vulnerable_copies(packages, name)}, key=version_key
@@ -488,8 +515,11 @@ def build_npm_plan(
     for name, item in items.items():
         if item.why or not vulnerable_copies(round1, name):
             continue
-        planned, pins, extra = _plan_package(name, ranges[name], round1, base, releases)
+        planned, pins, extra, left_copies = _plan_package(
+            name, ranges[name], round1, base, releases
+        )
         item.held_by = planned.held_by
+        skipped[name] = left_copies
         if planned.why:
             item.why = planned.why
             continue
@@ -521,11 +551,17 @@ def build_npm_plan(
             item.why = f"npm still locks {first_items(left, 3)}"
             continue
         item.included = True
-        pinned = [pins[name] for pins in overrides.values() if name in pins]
-        item.version = (
-            max(pinned, key=version_key)
-            if pinned
-            else max(_versions(final).get(name, {""}), key=version_key)
+        if skipped.get(name):
+            item.leaves = "; ".join(skipped[name].values())
+        # What the vulnerable copies became, not the newest copy anywhere in the
+        # lock: upscayl's yaml 1.10.2 is not "→ 2.9.1" because a 2.x copy exists.
+        replaced = {
+            str(final[key]["version"])
+            for key in original_keys.get(name, [])
+            if key in final and key not in skipped.get(name, {})
+        }
+        item.version = ", ".join(sorted(replaced, key=version_key)) or max(
+            _versions(final).get(name, {""}), key=version_key
         )
         item.edits = [
             PlanEdit(MANIFEST, name, "", pins[name], "override", scope=parent)

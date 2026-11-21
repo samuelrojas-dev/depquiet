@@ -360,3 +360,45 @@ def test_no_override_across_a_major_version(tmp_path, monkeypatch) -> None:
     assert "on a newer major line (14.0.2 and up)" in item.why
     assert "upgrading @next/eslint-plugin-next is the fix" in item.why
     assert plan.diff == ""
+
+
+def test_a_cross_major_copy_is_left_while_the_others_are_fixed(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """upscayl: minimatch 3.x and 9.x copies have same-line fixes; one 10.x copy needs 11.x."""
+    import sys
+
+    entries = {
+        "node_modules/eslint": ("8.57.0", {"minimatch": "^3.0.4"}),
+        "node_modules/eslint/node_modules/minimatch": ("3.0.4", {}),
+        "node_modules/app-builder-lib": ("25.1.8", {"minimatch": "^10.0.0"}),
+        "node_modules/app-builder-lib/node_modules/minimatch": ("10.0.1", {}),
+    }
+    monkeypatch.setitem(RELEASES, "minimatch", ["3.0.4", "3.0.5", "10.0.1", "10.2.0", "11.0.1"])
+    finding = _finding("minimatch", "<3.0.5 || >=7.0.0 <11.0.1")
+    plan, _ = _plan(
+        tmp_path,
+        monkeypatch,
+        finding,
+        entries=entries,
+        root={"eslint": "8.57.0", "app-builder-lib": "25.1.8"},
+    )
+    [item] = plan.included
+    assert item.version == "3.0.5"  # what the fixed copy became
+    assert [(e.scope, e.new) for e in item.edits] == [("eslint", "3.0.5")]
+    assert item.leaves.startswith("minimatch 10.0.1 under app-builder-lib 25.1.8: every fixed")
+    print_fix_plan(plan, sys.stdout)
+    assert "(it leaves minimatch 10.0.1 under app-builder-lib 25.1.8" in capsys.readouterr().out
+    assert plan.to_dict()["included"][0]["leaves"] == item.leaves
+
+
+def test_the_version_shown_is_what_the_vulnerable_copy_became(tmp_path, monkeypatch) -> None:
+    """upscayl's yaml 1.10.2 read "→ 2.9.1" because an unrelated 2.x copy was in the lock."""
+    entries = {
+        **BASE,
+        "node_modules/foo": ("1.0.0", {"minimatch": "^9.0.0"}),
+        "node_modules/foo/node_modules/minimatch": ("9.0.0", {}),
+    }
+    plan, _ = _plan(tmp_path, monkeypatch, _finding("minimatch", "<3.0.5"), entries=entries)
+    [item] = plan.included
+    assert item.version == "3.1.5"
