@@ -217,7 +217,12 @@ class FixPlan:
             "together: check that before merging."
         )
         floor = self.python_floor
-        if floor is not None and not floor.adopted and floor.unblocked:
+        if floor is not None and not floor.adopted and floor.avoids and not floor.unblocked:
+            text += (
+                f" Raising requires-python to >={floor.floor} avoids it (verified; see "
+                "Python floor)."
+            )
+        elif floor is not None and not floor.adopted and floor.unblocked:
             text += (
                 " In a lock forked by Python version this is usually the copy for the oldest "
                 "Python you support; raising requires-python (see Python floor) may avoid it."
@@ -1123,6 +1128,49 @@ def _refine_floor(
     return None
 
 
+def _project_floor(project: Path) -> str:
+    """The lowest Python any member's ``requires-python`` admits ("" when none says)."""
+    floors: list[str] = []
+    for path in _member_pyprojects(project):
+        try:
+            data = tomllib.loads(path.read_text(encoding="utf-8"))
+        except (OSError, tomllib.TOMLDecodeError):
+            continue
+        spec = (data.get("project") or {}).get("requires-python")
+        if isinstance(spec, str) and _old_floor(spec):
+            floors.append(_old_floor(spec))
+    return min(floors, key=version_key) if floors else ""
+
+
+def _avoid_split(
+    project: Path, executable: str, included: list[PlanItem], report: str, timeout: int
+) -> tuple[PythonFloor, str] | None:
+    """The floor that keeps one copy of a package, when the plan fits only by splitting.
+
+    Real case (NVIDIA warp, 2026-11-20): requires-python >=3.11, and soupsieve 4.0
+    (which needs 3.11.5) still resolves: uv splits the lock and gives the oldest
+    Pythons beautifulsoup4 4.6.3 (2018), which does not use soupsieve at all. On
+    an own fixture the split is at 3.11.5. The plan is valid, but the reviewer
+    should know that raising requires-python to the split point keeps one
+    current beautifulsoup4. Returns (option, uv's report), or None.
+    """
+    if not any(c.downgrade for c in _uv_lock_changes(report, included)):
+        return None
+    current = _project_floor(project)
+    if not current:
+        return None
+    with tempfile.TemporaryDirectory(prefix="depquiet-fixplan-") as tmp:
+        root = Path(tmp) / "project"
+        shutil.copytree(project, root, ignore=_COPY_IGNORE, symlinks=True)
+        _apply(root, [e for i in included for e in i.edits])
+        refined = _refine_floor(project, root, executable, included, current, [], report, timeout)
+    if refined is None:
+        return None
+    floor, edits, dropped, new_report, held = refined
+    option = PythonFloor(floor, edits=edits, dropped=dropped, refined_from=current, avoids=held)
+    return option, new_report
+
+
 # Shown when the project has no lockfile --fix-plan can work with.
 UNSUPPORTED_NOTE = (
     "--fix-plan works on uv projects (uv.lock) and Poetry projects (poetry.lock). "
@@ -1246,6 +1294,15 @@ def build_fix_plan(
         items += _partial_fixes(
             project, executable, items, floors, result, installed, timeout, include_filtered, report
         )
+    if option is None and report and any(i.included for i in items):
+        split = _avoid_split(
+            project, executable, [i for i in items if i.included], report[0], timeout
+        )
+        if split is not None:
+            option, split_report = split
+            if raise_python_floor:
+                option.adopted = True
+                report[:] = [split_report]
     if report:
         _count_carried(items, report[0])
     included = [i for i in items if i.included]
@@ -1611,9 +1668,18 @@ def fix_plan_markdown(plan: FixPlan, result: ScanResult, version: str = "") -> s
             "",
             "### Python floor",
             "",
-            f"Raises `requires-python` to `>={floor.floor}`, which "
-            + ("this fix needs" if len(floor.unblocked) == 1 else "these fixes need")
-            + f": {', '.join(f'`{cell(n)}`' for n in floor.unblocked)}. Python "
+            f"Raises `requires-python` to `>={floor.floor}`, "
+            + (
+                f"so every Python gets the same {cell(first_items(floor.avoids, 4))}"
+                if not floor.unblocked
+                else (
+                    "which this fix needs"
+                    if len(floor.unblocked) == 1
+                    else "which these fixes need"
+                )
+                + f": {', '.join(f'`{cell(n)}`' for n in floor.unblocked)}"
+            )
+            + ". Python "
             + (floor.dropped or f"below {floor.floor}")
             + (" are" if " and " in floor.dropped else " is")
             + " no longer supported: fine for an application, a breaking change for "
@@ -1655,6 +1721,22 @@ def python_floor_lines(option: PythonFloor | None, tool: str = "uv") -> list[str
     lines = ["", "Python floor:"]
     if option.problem:
         lines.append(f"  some fixes need a newer Python, but {option.problem}")
+        return lines
+    if not option.unblocked and option.avoids:
+        avoids = first_items(option.avoids, 4)
+        lines.append(
+            f"  Raising requires-python to >={option.floor} "
+            f"{'keeps' if option.adopted else 'would keep'} one current {avoids} for every "
+            f"Python, verified with uv's resolver: with >={option.refined_from}, uv splits the "
+            f"lock at {option.floor} and gives older Pythons an older {avoids}."
+        )
+        drop = f"Python {option.dropped}" if option.dropped else f"Python below {option.floor}"
+        lines.append(
+            f"  It drops {drop}: fine for an application, a breaking change for users of a "
+            "published library."
+        )
+        if not option.adopted:
+            lines.append("  Add --raise-python-floor to put that change in the plan.")
         return lines
     if not option.unblocked:
         lines.append(

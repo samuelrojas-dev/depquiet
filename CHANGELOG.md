@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **The fix plan says when a fix fits only by splitting the lock.** uv can fit soupsieve 4.0 on
+  `requires-python >=3.11` by giving Python 3.11.0-3.11.4 beautifulsoup4 4.6.3 (2018). The plan
+  now finds the split point, checks that raising `requires-python` to it (`>=3.11.5`) keeps one
+  beautifulsoup4, and says so; `--raise-python-floor` puts that edit in the plan. Found by
+  checking the Python floor study with the resolver.
+
+### Fixed
+- A build failure names the package and its last error. uv's hint ("Build failures usually
+  indicate a problem with the package or the build environment") named neither, and every fix
+  in the plan repeated it. When the package is the project itself or a local path
+  dependency, the message says uv needs it to read the project's metadata.
+
 ## [0.53.0] - 2026-11-20
 
 ### Added

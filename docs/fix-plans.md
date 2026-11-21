@@ -190,6 +190,33 @@ Poetry plans do the same: asked to update soupsieve on a `>=3.10` project, Poetr
 2.10, the newest release that installs there, and the plan keeps that as a partial fix when
 it closes at least one alert.
 
+#### Fixes that fit only by splitting the lock
+
+Sometimes uv does fit the fix on your current Python, by splitting the lock: the newest
+Pythons get the fix, and the oldest ones get an older copy of some other package. Real run
+with uv 0.11.32 on a small project with `requires-python = ">=3.11"` and `beautifulsoup4`; uv
+made the same split (beautifulsoup4 4.6.3 for the oldest Pythons) on NVIDIA warp when the
+[Python floor study](../research/2026-11-python-floor/README.md) was checked with the resolver:
+
+```
+🔧 Fix plan
+   ✓ soupsieve 2.10 → 4.0.0: upgrade  (major version change)
+
+   It also changes uv.lock:
+     · ⚠ beautifulsoup4 4.15.0 → 4.6.3, 4.15.0 (an older version)
+   The lock moves beautifulsoup4 to an older version to fit the fixes together: check that before merging. Raising requires-python to >=3.11.5 avoids it (verified; see Python floor).
+
+   Python floor:
+     Raising requires-python to >=3.11.5 would keep one current beautifulsoup4 for every Python, verified with uv's resolver: with >=3.11, uv splits the lock at 3.11.5 and gives older Pythons an older beautifulsoup4.
+```
+
+The plan is valid: beautifulsoup4 4.6.3 does not use soupsieve at all, and pip-audit found no
+advisory for it (checked 20 November 2026). But Python 3.11.0 to 3.11.4 then run a
+beautifulsoup4 from August 2018 instead of June 2026, from before it moved its CSS selectors
+to soupsieve. depquiet finds the split point in the lock uv writes on a temporary copy, and
+checks that raising the floor to it leaves one copy. With `--raise-python-floor` that edit
+goes into the plan.
+
 ### Fixing filtered alerts too (`--fix-filtered`)
 
 The plan covers the alerts depquiet shows. A filtered alert (pytest in a `dev` group, say)
