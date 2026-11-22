@@ -69,6 +69,23 @@ copies bundled in npm reported as "npm still locks"; advisories bounded by prere
 electron widened from `^33.2.1` to `^42.11.16` and exiftool-vendored to a new major as if
 they were lockfile fixes. The CHANGELOG has each one.
 
+## And pnpm?
+
+Of the same 400 repos, 119 lock with pnpm, 155 with npm, 43 with yarn and 15 with bun (68
+have none of these at the root). Before building pnpm plans, the same case was tried on an
+own pnpm project (pnpm 12.18, 21 November 2026): @tailwindcss/typography 0.5.19 pinning
+postcss-selector-parser 6.0.10. `pnpm audit --fix` wrote
+
+```yaml
+overrides:
+  postcss-selector-parser@<6.1.5: ^6.1.5
+```
+
+to `pnpm-workspace.yaml`, and pnpm then locked 6.1.6. That is the override depquiet's npm
+plan writes, on the fixed package's own line, and typography stays at 0.5.19. pnpm's own
+fix already avoids the downgrade npm audit proposes, so pnpm plans are not a priority for
+depquiet. Measured on one case, not on the 119 repos.
+
 ## Method
 
 1. GitHub search: the 200 most-starred TypeScript and 200 most-starred JavaScript repos with
