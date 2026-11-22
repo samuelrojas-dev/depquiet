@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.57.0] - 2026-11-21
+
 ### Added
 - The Action's `fix-pr` works on npm projects: one pull request with the verified
   `package.json` change (requirements and scoped overrides) and `package-lock.json`. npm
@@ -1553,7 +1555,8 @@ requirements.txt and npm projects:
 - CI workflow with lint, typecheck, test matrix (3.11/3.12/3.13), and build
 - Automated release workflow with trusted PyPI publishing
 
-[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.56.3...HEAD
+[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.57.0...HEAD
+[0.57.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.56.3...v0.57.0
 [0.56.3]: https://github.com/samuelrojas-dev/depquiet/compare/v0.56.2...v0.56.3
 [0.56.2]: https://github.com/samuelrojas-dev/depquiet/compare/v0.56.1...v0.56.2
 [0.56.1]: https://github.com/samuelrojas-dev/depquiet/compare/v0.56.0...v0.56.1
