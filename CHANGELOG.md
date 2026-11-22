@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- uv plans: when a fix needs a newer Python than the project's floor, the plan first asks uv
+  for the package by name (`uv lock --upgrade-package soupsieve`) and keeps the result when uv
+  locks one release per Python range: the full fix on the Pythons that can install it, the
+  newest release that installs on the older ones, `requires-python` unchanged. Before, the
+  partial fix pinned the older release for every Python. The FinanceDatabase maintainer
+  asked for exactly this split in review and merged it (JerBouma/FinanceDatabase#269).
+
 ## [0.57.1] - 2026-11-21
 
 ### Added

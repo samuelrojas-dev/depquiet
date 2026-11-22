@@ -186,6 +186,17 @@ version" without naming Python
 ([dependabot-core#16987](https://github.com/dependabot/dependabot-core/issues/16987)). With
 `--raise-python-floor` the plan raises the floor instead and adds no partial fix.
 
+When uv can lock one release per Python range, the plan asks for that instead of a single
+older release: `uv lock --upgrade-package soupsieve`, with no version and no change to
+`requires-python`, gives the Pythons that can install the full fix that release and keeps the
+newest release that installs on the older ones. That is what the FinanceDatabase maintainer
+asked for and merged
+([JerBouma/FinanceDatabase#269](https://github.com/JerBouma/FinanceDatabase/pull/269), with
+`requires-python = ">=3.11, <3.16"`): soupsieve 4.1.3 on Python 3.11.5 and newer, 2.10 on
+3.11.0–3.11.4. The plan keeps such a fork only when the newer copy reaches the full fix, the
+older copy moves forward and closes at least one alert, and nothing else in the lock moves
+back; otherwise it falls back to the single partial release above.
+
 Poetry plans do the same: asked to update soupsieve on a `>=3.10` project, Poetry moves it to
 2.10, the newest release that installs there, and the plan keeps that as a partial fix when
 it closes at least one alert.

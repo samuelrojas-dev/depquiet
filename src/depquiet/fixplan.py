@@ -105,6 +105,11 @@ class PlanEdit:
     scope: str = ""
 
 
+def _spec(item: PlanItem) -> str:
+    """The --upgrade-package argument for an item: a forked fix is asked for by name."""
+    return item.package if item.forked_below else f"{item.package}=={item.version}"
+
+
 @dataclass
 class PlanItem:
     """One package's fix and how the plan handles it."""
@@ -125,6 +130,12 @@ class PlanItem:
     # Set on the newest fix that installs on the current Python range, when the
     # full fix needs a newer Python: "closes 5 of 8 alerts; 3 need Python >=3.11.5".
     partial: str = ""
+    # Set when the partial fix lets uv fork the lock by Python version instead of
+    # pinning one release: the version the oldest Pythons keep ("2.10"), while
+    # ``version`` is what the newer ones get. Real case (FinanceDatabase PR 269,
+    # 2026-11-22): the maintainer kept requires-python >=3.11 and merged
+    # ``uv lock --upgrade-package soupsieve``: 4.1.3 on 3.11.5+, 2.10 below.
+    forked_below: str = ""
     # npm: who holds the vulnerable copy back ("typography 0.5.19 requires
     # postcss-selector-parser@6.0.10"), and npm audit's own fix when it is a downgrade.
     held_by: list[str] = field(default_factory=list)
@@ -287,7 +298,7 @@ class FixPlan:
         specs: list[str] = []
         # A carried fix needs no flag of its own: the command that was verified moves it.
         for item in (i for i in self.included if not i.carried):
-            specs.append(f"{item.package}=={item.version}")
+            specs.append(_spec(item))
             specs.extend(n for n in item.also_upgrade if n not in specs)
         return "uv lock " + " ".join(f"--upgrade-package {s}" for s in specs) if specs else ""
 
@@ -305,6 +316,7 @@ class FixPlan:
                     "fixed_in": i.fixed_in or None,
                     "carried": i.carried,
                     "partial": i.partial or None,
+                    "forked_below": i.forked_below or None,
                     "installed": i.installed,
                     "major_version_change": i.major_jump,
                     "also_upgrade": i.also_upgrade,
@@ -813,7 +825,7 @@ def _resolves(
     """
     specs: list[str] = []
     for item in items:
-        specs.append(f"{item.package}=={item.version}")
+        specs.append(_spec(item))
         specs.extend(n for n in item.also_upgrade if n not in specs)
     answer = _run_lock(root, executable, specs, timeout)
     if isinstance(answer, str):
@@ -1131,7 +1143,7 @@ def _refine_floor(
         return None
     specs: list[str] = []
     for item in items:
-        specs.append(f"{item.package}=={item.version}")
+        specs.append(_spec(item))
         specs.extend(n for n in item.also_upgrade if n not in specs)
     scratch = root.parent / "split-probe"
     shutil.copytree(root, scratch, ignore=_COPY_IGNORE, symlinks=True)
@@ -1456,6 +1468,20 @@ def _partial_fixes(
             key=version_key,
             reverse=True,
         )
+        # Only when an older release closes something: the bottom copy must count.
+        forked = (
+            _forked_fix(
+                project, executable, kept, blocked, fixes, floors[blocked.package], now, timeout
+            )
+            if options
+            else None
+        )
+        if forked is not None:
+            item, lock_report = forked
+            report[:] = lock_report
+            kept.append(item)
+            found.append(item)
+            continue
         for version in options[:3]:
             trial = PlanItem(blocked.package, version, now)
             output: list[str] = []
@@ -1476,6 +1502,51 @@ def _partial_fixes(
             found.append(trial)
             break
     return found
+
+
+def _forked_fix(
+    project: Path,
+    executable: str,
+    kept: list[PlanItem],
+    blocked: PlanItem,
+    fixes: list[str],
+    floor: str,
+    now: str,
+    timeout: int,
+) -> tuple[PlanItem, list[str]] | None:
+    """The full fix for newer Pythons and the best one for older, when uv forks the lock.
+
+    ``uv lock --upgrade-package soupsieve`` (no version) lets uv lock the newest
+    release on the Pythons that can install it and an older one below, without
+    touching requires-python. Kept only when the fork reaches the full fix on
+    top, moves the bottom copy forward, and moves nothing else back.
+    """
+    trial = PlanItem(blocked.package, blocked.version, now, forked_below="?")
+    output: list[str] = []
+    with tempfile.TemporaryDirectory(prefix="depquiet-forked-") as tmp:
+        root = Path(tmp) / "project"
+        shutil.copytree(project, root, ignore=_COPY_IGNORE, symlinks=True)
+        _apply(root, [e for i in kept for e in i.edits])
+        if _resolves(root, executable, [*kept, trial], timeout, output) is not None or not output:
+            return None
+    versions = sorted(_final_versions(output[0]).get(_pep503(blocked.package), []), key=version_key)
+    if len(versions) < 2:
+        return None
+    low, high = versions[0], versions[-1]
+    full = blocked.fixed_in or blocked.version
+    if version_key(high) < version_key(full) or (now and version_key(low) <= version_key(now)):
+        return None
+    if any(c.downgrade for c in _uv_lock_changes(output[0], [*kept, trial])):
+        return None
+    closes = sum(1 for v in fixes if version_key(v) <= version_key(low))
+    if not closes:
+        return None
+    trial.version, trial.forked_below, trial.included = high, low, True
+    trial.partial = (
+        f"Python >={floor} gets {high}, which closes all {len(fixes)} alerts; older "
+        f"Pythons keep {low}, which closes {closes}"
+    )
+    return trial, output
 
 
 def _verify_candidates(
@@ -1626,6 +1697,8 @@ def _how_change(item: PlanItem) -> str:
     own = [e for e in item.edits if _pep503(e.package) == _pep503(item.package)]
     if item.carried:
         return "moves past the fix with the rest of the plan"
+    if item.forked_below:
+        return f"`requires-python` unchanged; uv locks one release per Python range: {item.partial}"
     if item.partial:
         return f"the newest fix the current Python range allows: {item.partial}"
     if item.python_floor:
@@ -1839,6 +1912,10 @@ def print_fix_plan(plan: FixPlan, file: Any) -> None:
         own = [e for e in item.edits if _pep503(e.package) == _pep503(item.package)]
         if item.carried:
             how = "moves past the fix with the rest of the plan"
+        elif item.forked_below:
+            how = (
+                f"requires-python unchanged, uv locks one release per Python range ({item.partial})"
+            )
         elif item.partial:
             how = f"the newest fix your Python range allows ({item.partial})"
         elif item.python_floor:
