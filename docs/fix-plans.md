@@ -317,6 +317,9 @@ Limits:
   line and a parent pins the copy below it (upscayl: every fixed glob is 14.x, and
   @next/eslint-plugin-next pins 10.3.10), the plan leaves that copy, names the parent to
   upgrade, and still fixes the package's other copies.
+- Never a major upgrade of your own dependency either: when every fixed release of a
+  package you declare is on a newer major line (upscayl's electron, `^33.2.1`, fixed only in
+  42.x), the plan names the jump and leaves the change to you.
 - Copies bundled inside another package (`inBundle`, like the minimatch that npm 11.10.1
   ships in its own tarball) are named, not chased: only a new release of that package
   changes them.

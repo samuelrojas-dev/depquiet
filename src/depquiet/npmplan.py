@@ -362,6 +362,17 @@ def _plan_package(
                 section = next(
                     (s for s in _ROOT_KEYS if name in (manifest.get(s) or {})), "dependencies"
                 )
+                if not within and _line(target) != _line(version):
+                    # upscayl (2026-11-21): every fixed electron is 42.x, the project asks
+                    # for ^33.2.1. Nine major versions of the app's own runtime are not a
+                    # lockfile fix; the plan names the jump and leaves it to the project.
+                    skipped[key] = (
+                        f"{name} {version}, your own dependency ({section}: {declared}): "
+                        f"every fixed release is on a newer major line ({target} and up), so "
+                        f"the fix is a major upgrade of {name}: change it in package.json "
+                        "when you are ready"
+                    )
+                    break
                 copy_requirements[(section, name)] = _keep_operator(declared, target)
                 continue
             parent = _name(holder, packages[holder])
@@ -557,7 +568,11 @@ def build_npm_plan(
         item.held_by = planned.held_by
         skipped[name] = left_copies
         if planned.why:
-            item.why = planned.why
+            # Every copy round 1 left needs a major upgrade: nothing to add here, but
+            # round 1 may still have fixed the package's other copies (minimatch 3.x
+            # next to the project's own 9.x, on an own fixture).
+            if not (left_copies and set(vulnerable_keys(round1, name)) <= set(left_copies)):
+                item.why = planned.why
             continue
         candidate = {p: dict(v) for p, v in overrides.items()}
         for parent, values in pins.items():
@@ -585,6 +600,9 @@ def build_npm_plan(
         left = vulnerable_copies(final, name)
         if left:
             item.why = f"npm still locks {first_items(left, 3)}"
+            continue
+        if not [k for k in original_keys.get(name, []) if k not in skipped.get(name, {})]:
+            item.why = "; ".join(skipped.get(name, {}).values()) or "nothing to change"
             continue
         item.included = True
         if skipped.get(name):

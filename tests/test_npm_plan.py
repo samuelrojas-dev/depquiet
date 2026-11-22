@@ -99,7 +99,8 @@ def _fake_npm(monkeypatch, *, fail: bool = False) -> list[list[str]]:
         pin = overrides.get("@tailwindcss/typography", {}).get("postcss-selector-parser")
         if pin:
             packages["node_modules/postcss-selector-parser"] = {"version": pin}
-        if "minimatch" in args and "node_modules/minimatch" in packages:
+        hoisted = packages.get("node_modules/minimatch", {}).get("version", "")
+        if "minimatch" in args and hoisted.startswith("3."):
             # Like npm 9.2 in upscayl: only the hoisted copy moves (never a bundled one).
             packages["node_modules/minimatch"] = {"version": "3.1.5"}
         for parent, pins in overrides.items():
@@ -436,3 +437,50 @@ def test_an_existing_nested_override_is_named_not_rewritten(tmp_path, monkeypatc
         "your package.json already overrides qs under typed-rest-client to 6.15.3; "
         "6.16.1 is the lowest fixed release: raise it there"
     )
+
+
+def test_a_major_upgrade_of_your_own_dependency_is_left_to_you(tmp_path, monkeypatch) -> None:
+    """upscayl: devDependencies electron ^33.2.1; every fixed electron is 42.x."""
+    entries = {
+        "node_modules/electron": ("33.2.1", {}),
+        "node_modules/electron-settings": ("4.0.4", {"electron": ">= 2"}),
+    }
+    monkeypatch.setitem(RELEASES, "electron", ["33.2.1", "33.4.11", "42.11.16", "42.11.18"])
+    project = _project(
+        tmp_path,
+        entries=entries,
+        root={"electron-settings": "^4.0.4"},
+        extra={"devDependencies": {"electron": "^33.2.1"}},
+    )
+    lock = json.loads((project / "package-lock.json").read_text(encoding="utf-8"))
+    lock["packages"][""]["devDependencies"] = {"electron": "^33.2.1"}
+    (project / "package-lock.json").write_text(json.dumps(lock), encoding="utf-8")
+    _fake_npm(monkeypatch)
+    plan = build_npm_plan(_result(_finding("electron", "<42.11.16")), project, releases=_releases)
+    [item] = plan.left_out
+    assert item.why.startswith(
+        "electron 33.2.1, your own dependency (devDependencies: ^33.2.1): every fixed "
+        "release is on a newer major line (42.11.16 and up)"
+    )
+    assert plan.diff == "" and item.edits == []
+
+
+def test_other_copies_are_fixed_when_your_own_needs_a_major(tmp_path, monkeypatch) -> None:
+    """Own fixture (npm 10.9): glob's nested minimatch 3.0.4 → 3.1.5; your own 9.0.5 stays."""
+    entries = {
+        "node_modules/glob": ("7.2.0", {"minimatch": "^3.0.4"}),
+        "node_modules/glob/node_modules/minimatch": ("3.0.4", {}),
+        "node_modules/minimatch": ("9.0.5", {}),
+    }
+    monkeypatch.setitem(RELEASES, "minimatch", ["3.0.4", "3.1.5", "9.0.5", "11.0.1"])
+    finding = _finding("minimatch", "<3.1.5 || >=7.0.0 <11.0.1")
+    plan, _ = _plan(
+        tmp_path,
+        monkeypatch,
+        finding,
+        entries=entries,
+        root={"glob": "7.2.0", "minimatch": "9.0.5"},
+    )
+    [item] = plan.included
+    assert item.version == "3.1.5"
+    assert item.leaves.startswith("minimatch 9.0.5, your own dependency (dependencies: 9.0.5):")
