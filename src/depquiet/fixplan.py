@@ -1704,6 +1704,16 @@ def fix_plan_markdown(plan: FixPlan, result: ScanResult, version: str = "") -> s
             f"| `{cell(item.package)}` | {cell(item.installed or '?')} "
             f"| {cell(item.version)}{major} | {cell(ids)} | {cell(_how(item))} |"
         )
+    offered = [(i, i.audit_note) for i in plan.included if i.audit_note]
+    if offered:
+        # The reason to read this pull request instead of running the tool's own
+        # fix: npm audit fix --force would have moved these parents back.
+        lines += ["", "### Instead of what npm audit offers", ""]
+        lines += [f"- `{cell(i.package)}`: {cell(note)}." for i, note in offered]
+    held = [(i, h) for i in plan.included for h in i.held_by]
+    if held:
+        lines += ["", "### What held these packages back", ""]
+        lines += [f"- `{cell(i.package)}`: {cell(h)}." for i, h in held]
     if plan.lock_changes:
         lockfile = lockfile_name(plan.tool)
         lines += ["", f"### Other changes in `{lockfile}`", ""]

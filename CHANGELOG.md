@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- npm pull request descriptions (`--fix-plan-report`, the Action's `fix-pr`) say what npm
+  audit offered instead ("npm audit fix --force would move @tailwindcss/typography back from
+  0.5.19 to 0.5.4") and which parent held each package back. The first real fix pull request
+  on an npm project (depquiet-npm-fixpr-test #1) showed only the override.
+
 ## [0.57.0] - 2026-11-21
 
 ### Added
