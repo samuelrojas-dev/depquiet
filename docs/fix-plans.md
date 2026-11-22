@@ -326,15 +326,17 @@ Limits:
 - By default the plan covers *action* alerts. Alerts in development-only packages are
   *filtered* and need `--fix-filtered`; npm audit counts them all.
 - Not yet: workspaces that declare the vulnerable package themselves (the plan names the
-  workspace to change), pnpm and yarn lockfiles, `fix-pr`, and `--check-fixes` (for npm, the
-  plan is the check).
+  workspace to change), pnpm and yarn lockfiles, and `--check-fixes` (for npm, the plan is
+  the check). The Action's `fix-pr` works on npm projects: it commits `package.json` and
+  `package-lock.json`.
 - An existing override of the same package or parent is never rewritten: that fix is
   left out, with the reason.
 
 ### One pull request with every fix that installs (`fix-pr`)
 
 `--fix-plan --apply` applies the verified plan to the project: it edits the requirements
-and runs `uv lock`. If `uv lock` fails, every file is put back as it was. The Action's
+and runs `uv lock` (`poetry update --lock` for Poetry, `npm update --package-lock-only
+--ignore-scripts` for npm). If that fails, every file is put back as it was. The Action's
 `fix-pr` input does that on a schedule and opens **one pull request** with the result, so
 the work left for you is to read it and let your tests run:
 

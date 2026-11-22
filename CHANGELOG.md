@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- The Action's `fix-pr` works on npm projects: one pull request with the verified
+  `package.json` change (requirements and scoped overrides) and `package-lock.json`. npm
+  runs with `--package-lock-only --ignore-scripts`, so no install script runs in the job
+  that holds the push token.
+
 ## [0.56.3] - 2026-11-21
 
 ### Changed

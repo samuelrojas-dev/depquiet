@@ -73,7 +73,7 @@ version change above all, is for your tests to say.
   the parent back (@tailwindcss/typography 0.5.19 → 0.5.4), the plan adds an `overrides`
   entry scoped to that parent, on the fixed package's own line, and verifies it with npm.
 - **One pull request:** the Action's `fix-pr` input opens a single pull request with every
-  fix that installs (uv and Poetry), and lists the ones that don't, with the reason.
+  fix that installs (uv, Poetry and npm), and lists the ones that don't, with the reason.
 
 Every case, with real runs: [Fix plans](https://github.com/samuelrojas-dev/depquiet/blob/main/docs/fix-plans.md).
 
