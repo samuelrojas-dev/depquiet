@@ -1343,6 +1343,8 @@ def build_fix_plan(
         items += _partial_fixes(
             project, executable, items, floors, result, installed, timeout, include_filtered, report
         )
+    if report and not raise_python_floor and any(i.included for i in items):
+        _fork_instead(project, executable, items, result, timeout, include_filtered, report)
     if option is None and report and any(i.included for i in items):
         split = _avoid_split(
             project, executable, [i for i in items if i.included], report[0], timeout
@@ -1547,6 +1549,72 @@ def _forked_fix(
         f"Pythons keep {low}, which closes {closes}"
     )
     return trial, output
+
+
+def _fork_instead(
+    project: Path,
+    executable: str,
+    items: list[PlanItem],
+    result: ScanResult,
+    timeout: int,
+    include_filtered: bool,
+    report: list[str],
+) -> None:
+    """Ask for a fix by name when pinning it moves another package back.
+
+    Real case (FinanceDatabase, 2026-11-22, requires-python >=3.11): with
+    ``soupsieve==4.0.0`` uv gave Python 3.11.0-3.11.4 yfinance 0.1.96 (2022)
+    so that every Python got soupsieve 4. ``--upgrade-package soupsieve``
+    kept yfinance 1.4.1 and gave those Pythons soupsieve 2.10 instead: the
+    change the maintainer merged. The item becomes a forked fix when that
+    leaves nothing moved back.
+    """
+    included = [i for i in items if i.included]
+    if not any(c.downgrade for c in _uv_lock_changes(report[0], included)):
+        return
+    for item in included:
+        if item.carried or item.forked_below or item.partial:
+            continue
+        item.forked_below = "?"
+        output: list[str] = []
+        with tempfile.TemporaryDirectory(prefix="depquiet-fork-") as tmp:
+            root = Path(tmp) / "project"
+            shutil.copytree(project, root, ignore=_COPY_IGNORE, symlinks=True)
+            _apply(root, [e for i in included for e in i.edits])
+            failure = _resolves(root, executable, included, timeout, output)
+        item.forked_below = ""
+        if failure is not None or not output:
+            continue
+        versions = sorted(
+            _final_versions(output[0]).get(_pep503(item.package), []), key=version_key
+        )
+        if len(versions) < 2:
+            continue
+        low, high = versions[0], versions[-1]
+        full = item.fixed_in or item.version
+        if version_key(high) < version_key(full) or (
+            item.installed and version_key(low) <= version_key(item.installed)
+        ):
+            continue
+        if any(c.downgrade for c in _uv_lock_changes(output[0], included)):
+            continue
+        key = _pep503(item.package)
+        fixes = [
+            f.vuln.fix_version
+            for f in result.results
+            if _pep503(f.vuln.package) == key
+            and f.vuln.fix_version
+            and not f.vuln.fix_package
+            and (include_filtered or f.verdict is not Verdict.FILTERED)
+        ]
+        closes = sum(1 for v in fixes if version_key(v) <= version_key(low))
+        item.version, item.forked_below = high, low
+        item.partial = (
+            f"newer Pythons get {high}, which closes all {len(fixes)} alerts; older Pythons "
+            f"keep {low}, which closes {closes}, so nothing else moves back"
+        )
+        report[:] = output
+        return
 
 
 def _verify_candidates(

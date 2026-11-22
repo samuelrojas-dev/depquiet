@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   newest release that installs on the older ones, `requires-python` unchanged. Before, the
   partial fix pinned the older release for every Python. The FinanceDatabase maintainer
   asked for exactly this split in review and merged it (JerBouma/FinanceDatabase#269).
+- uv plans: when a pinned fix resolves only by moving another package back (on FinanceDatabase,
+  `soupsieve==4.0.0` gave Python 3.11.0–3.11.4 yfinance 0.1.96 from 2022), the plan asks for
+  the fix by name and keeps that instead when nothing moves back.
 
 ## [0.57.1] - 2026-11-21
 
