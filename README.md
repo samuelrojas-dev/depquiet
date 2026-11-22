@@ -15,12 +15,12 @@ When the fix for a vulnerable dependency does not install, Dependabot reports th
 cannot update the dependency to a non-vulnerable version, and the alert stays open. Often,
 one line is in the way: your own pin, a parent package that caps the vulnerable one, or a
 `requires-python` that still allows an old Python. depquiet tries the change on a
-temporary copy of your project with **uv** or **Poetry** and gives you the diff that lets
-the fixes install together. Your project is not touched until you apply it.
+temporary copy of your project with **uv**, **Poetry** or **npm** and gives you the diff
+that lets the fixes install together. Your project is not touched until you apply it.
 
 ```bash
 pip install depquiet pip-audit
-depquiet --fix-plan plan.diff   # the change, verified with uv or Poetry
+depquiet --fix-plan plan.diff   # the change, verified with uv, Poetry or npm
 git apply plan.diff             # then run the lock command it prints
 ```
 
@@ -105,6 +105,12 @@ In a read-only snapshot of popular uv projects (2026-11-20), 40 of the 70 with a
 vulnerable package that no fixed release reaches on their oldest supported Python
 ([study](https://github.com/samuelrojas-dev/depquiet/tree/main/research/2026-11-python-floor)).
 
+**npm:** on four popular projects (upscayl, nodemon, OpenHands, mathjs; 2026-11-21), the
+plan, applied to a clone, took npm audit from 154 to 97 vulnerable packages, with no
+downgrade and no major upgrade. Where npm audit's only fix was semver-major, it was a
+downgrade in 221 of 399 cases in a pilot of 153 lockfiles
+([npm study](https://github.com/samuelrojas-dev/depquiet/tree/main/research/2026-11-npm-pilot)).
+
 ## Quick start
 
 ```bash
@@ -113,7 +119,7 @@ cd your-project
 depquiet                                 # triage: npm, pnpm and Python in one run
 depquiet explain GHSA-3jp2-3mrg-2vxc     # why this alert got its verdict
 depquiet --check-fixes                   # uv projects: can each fix actually be installed?
-depquiet --fix-plan plan.diff --fix-plan-report plan.md   # uv and Poetry: the diff, and a pull request description
+depquiet --fix-plan plan.diff --fix-plan-report plan.md   # uv, Poetry, npm: the diff, and a pull request description
 ```
 
 ```yaml
