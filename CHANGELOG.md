@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.56.3] - 2026-11-21
+
 ### Changed
 - npm plans no longer include a major upgrade of the project's own dependency. When every
   fixed release is on a newer major line, that copy is left, with the jump named
@@ -1545,7 +1547,8 @@ requirements.txt and npm projects:
 - CI workflow with lint, typecheck, test matrix (3.11/3.12/3.13), and build
 - Automated release workflow with trusted PyPI publishing
 
-[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.56.2...HEAD
+[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.56.3...HEAD
+[0.56.3]: https://github.com/samuelrojas-dev/depquiet/compare/v0.56.2...v0.56.3
 [0.56.2]: https://github.com/samuelrojas-dev/depquiet/compare/v0.56.1...v0.56.2
 [0.56.1]: https://github.com/samuelrojas-dev/depquiet/compare/v0.56.0...v0.56.1
 [0.56.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.55.0...v0.56.0
