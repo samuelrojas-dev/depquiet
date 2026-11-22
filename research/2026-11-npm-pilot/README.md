@@ -35,35 +35,39 @@ parent too).
 ## Checked on real projects
 
 After `--fix-plan` for npm shipped, it was run on four of the projects above, in a
-disposable VM on 21 November 2026 (depquiet 0.56.1, npm 9.2, `--fix-filtered` so that
+disposable VM on 21 November 2026 (depquiet 0.56.3, npm 9.2, `--fix-filtered` so that
 development-only alerts count too). Each project was cloned shallow; the plan was applied
 to that clone with `--apply`, and npm audit run before and after.
 
 | Project | npm audit vulnerable packages, before → after | Fixed / left out |
 |---|--:|--:|
-| upscayl | 49 → 21 | 25 / 8 |
-| nodemon | 64 → 48 | 18 / 13 |
-| OpenHands | 25 → 15 | 9 / 2 |
+| upscayl | 49 → 20 | 25 / 8 |
+| nodemon | 64 → 48 | 19 / 12 |
+| OpenHands | 25 → 15 | 10 / 1 |
 | mathjs | 16 → 14 | 3 / 5 |
-| **Total** | **154 → 98** | **55 / 28** |
+| **Total** | **154 → 97** | **57 / 26** |
 
-No package moved to an older version, and no override crossed a major version. What was
-left out, by reason:
+No package moved to an older version, no override crossed a major version, and no
+dependency the project declares was moved to a new major version. What was left out, by
+reason:
 
 - **Bundled inside another package's tarball** (`inBundle`): nodemon's dependency on npm
   11.10.1 ships glob, tar, sigstore, pacote and others; only a new npm release changes them.
 - **Every fixed release is on a newer major line, below a parent's pin**: for example
   diff 1.4.0 under mocha 2.5.3 (2016), tough-cookie 2.4.3 under request, and glob
   10.3.10 under @next/eslint-plugin-next. The plan names the parent to upgrade.
+- **Every fixed release is on a newer major line of the project's own dependency**:
+  upscayl's electron (`^33.2.1`, fixed only in 42.x) and exiftool-vendored (`^29.3.0`).
+  The plan names the jump and leaves it to the project.
 - **No fixed release published**: request 2.88.0 and extract-zip 2.0.1.
 - **The project's own override pins a vulnerable version**: OpenHands overrides qs under
-  typed-rest-client to 6.15.3, which is inside an advisory.
+  typed-rest-client to 6.15.3, which is inside an advisory; the plan names 6.16.1.
 
-Two of the reasons the plan gave were wrong, and are fixed since. Advisories bounded by
-prereleases (`>=15.0.0-canary.0 <15.5.30`, for next, electron and semver) made every
-release look vulnerable, so the plan reported "no fixed release" for next 15.5.29 and
-electron 33.4.11, and flagged semver 6.3.2, which no advisory covers. And the qs case was
-reported as "npm still locks" instead of naming the project's own override.
+Earlier runs the same day (0.56.0 to 0.56.2) found problems that are fixed in 0.56.3:
+copies bundled in npm reported as "npm still locks"; advisories bounded by prereleases
+(next, electron, semver) read as covering every release; and, in 0.56.2, upscayl's own
+electron widened from `^33.2.1` to `^42.11.16` and exiftool-vendored to a new major as if
+they were lockfile fixes. The CHANGELOG has each one.
 
 ## Method
 
