@@ -97,6 +97,11 @@ update had left the soupsieve alerts open, because uv kept a vulnerable soupsiev
 Python 3.11.0–3.11.4. The fix depquiet points to, `requires-python = ">=3.11.5"` and one
 soupsieve (4.1.3) in the lock, was reviewed and merged by the beets maintainers on
 21 November 2026. pip-audit counts 4 soupsieve advisories before and 0 after.
+In [FinanceDatabase](https://github.com/JerBouma/FinanceDatabase/pull/269) the maintainer
+preferred to keep `requires-python = ">=3.11, <3.16"` and merged a split lock on 22 November
+2026: soupsieve 4.1.3 for Python 3.11.5 and newer, 2.10 for 3.11.0–3.11.4. pip-audit counts
+6 soupsieve advisories before and 3 after, all on the 2.10 copy that only Python 3.11.0–3.11.4
+installs.
 
 Across 18 uv projects (2026-11-12), uv's resolver rejected the nearest fix for 502 of 991
 kept alerts (51%); in 81% of the blocked upgrades, a pin in the project's own
