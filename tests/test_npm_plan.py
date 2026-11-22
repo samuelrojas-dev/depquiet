@@ -484,3 +484,20 @@ def test_other_copies_are_fixed_when_your_own_needs_a_major(tmp_path, monkeypatc
     [item] = plan.included
     assert item.version == "3.1.5"
     assert item.leaves.startswith("minimatch 9.0.5, your own dependency (dependencies: 9.0.5):")
+
+
+def test_the_pull_request_says_what_npm_audit_offered_and_what_held_it(
+    tmp_path, monkeypatch
+) -> None:
+    plan, _ = _plan(tmp_path, monkeypatch, PSP)
+    md = fix_plan_markdown(plan, _result(PSP))
+    assert "### Instead of what npm audit offers" in md
+    assert (
+        "- `postcss-selector-parser`: npm audit fix --force would move "
+        "@tailwindcss/typography back from 0.5.19 to 0.5.4." in md
+    )
+    assert "### What held these packages back" in md
+    assert (
+        "- `postcss-selector-parser`: @tailwindcss/typography 0.5.19 requires "
+        "postcss-selector-parser@6.0.10." in md
+    )

@@ -109,7 +109,9 @@ vulnerable package that no fixed release reaches on their oldest supported Pytho
 plan, applied to a clone, took npm audit from 154 to 97 vulnerable packages, with no
 downgrade and no major upgrade. Where npm audit's only fix was semver-major, it was a
 downgrade in 221 of 399 cases in a pilot of 153 lockfiles
-([npm study](https://github.com/samuelrojas-dev/depquiet/tree/main/research/2026-11-npm-pilot)).
+([npm study](https://github.com/samuelrojas-dev/depquiet/tree/main/research/2026-11-npm-pilot)). A real fix pull request
+opened by the Action on an npm test project:
+[depquiet-npm-fixpr-test #1](https://github.com/samuelrojas-dev/depquiet-npm-fixpr-test/pull/1).
 
 ## Quick start
 
