@@ -108,7 +108,7 @@ inputs:
     required: false
     default: "true"
   fix-pr:
-    description: "uv and Poetry projects: open (or update) one pull request with every fix that the project's resolver confirms installs together: requirement changes in pyproject.toml/uv.toml plus the lock file (true/false). Skipped on pull_request events. Needs contents: write and pull-requests: write. Runs uv lock or poetry update --lock: trusted code only."
+    description: "uv, Poetry and npm projects: open (or update) one pull request with every fix that the project's resolver confirms installs together: requirement changes in pyproject.toml/uv.toml or package.json (requirements and scoped overrides) plus the lock file (true/false). Skipped on pull_request events. Needs contents: write and pull-requests: write. Runs uv lock or poetry update --lock (trusted code only), or npm update --package-lock-only --ignore-scripts."
     required: false
     default: "false"
   fix-pr-include-filtered:
@@ -508,8 +508,8 @@ runs:
       run: |
         set -euo pipefail
         if [ ! -s "$FIX_REPORT" ]; then
-          if [ ! -f "$INPUT_PATH/uv.lock" ] && [ ! -f "$INPUT_PATH/poetry.lock" ]; then
-            echo "::warning::depquiet: fix-pr works on uv and Poetry projects, and $INPUT_PATH has no uv.lock or poetry.lock; no pull request."
+          if [ ! -f "$INPUT_PATH/uv.lock" ] && [ ! -f "$INPUT_PATH/poetry.lock" ] && [ ! -f "$INPUT_PATH/package-lock.json" ]; then
+            echo "::warning::depquiet: fix-pr works on uv, Poetry and npm projects, and $INPUT_PATH has no uv.lock, poetry.lock or package-lock.json; no pull request."
           else
             echo "depquiet: no fix that the resolver confirms installs; no pull request."
           fi
@@ -529,6 +529,7 @@ runs:
         # Only what the plan changes: requirement files and the lockfile.
         # ls-files, not "git add" with pathspecs: add fails when one matches nothing.
         git ls-files -z -m -- ':(glob)**/pyproject.toml' ':(glob)**/uv.toml' ':(glob)**/uv.lock' ':(glob)**/poetry.lock' \
+          ':(glob)**/package.json' ':(glob)**/package-lock.json' \
           | xargs -0 -r git add --
         if git diff --cached --quiet; then
           echo "depquiet: the plan changed no tracked file; no pull request."

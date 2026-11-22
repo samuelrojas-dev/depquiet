@@ -197,7 +197,7 @@ def test_project_without_uv_lock_says_fix_pr_needs_uv(repo) -> None:
     (project / "uv.lock").unlink()
     result = _run_step("Open fix pull request", shell)
     assert result.returncode == 0
-    assert "fix-pr works on uv and Poetry projects" in result.stdout
+    assert "fix-pr works on uv, Poetry and npm projects" in result.stdout
     assert _git(remote, "branch", "--list") == ""
 
 
@@ -222,4 +222,26 @@ def test_poetry_project_commits_poetry_lock(repo) -> None:
     assert sorted(pushed.splitlines()[2:]) == [
         "apps/client portal/poetry.lock",
         "apps/client portal/pyproject.toml",
+    ]
+
+
+def test_npm_project_commits_package_json_and_its_lock(repo) -> None:
+    work, project, remote, _, shell = repo
+    (project / "uv.lock").unlink()
+    (project / "pyproject.toml").unlink()
+    (project / "package.json").write_text('{"dependencies": {"express": "4.19.2"}}\n')
+    (project / "package-lock.json").write_text('{"lockfileVersion": 3}\n')
+    _git(work, "add", "-A")
+    _git(work, "commit", "-q", "-m", "npm project")
+    (project / "package.json").write_text(
+        '{"dependencies": {"express": "4.22.3"}, "overrides": {"a": {"b": "1.0.1"}}}\n'
+    )
+    (project / "package-lock.json").write_text('{"lockfileVersion": 3, "x": 1}\n')
+    (project / "notes.txt").write_text("unrelated local change\n")
+    result = _run_step("Open fix pull request", shell)
+    assert result.returncode == 0, result.stderr
+    pushed = _git(remote, "show", "--name-only", "--format=%s", "depquiet/security-fixes")
+    assert sorted(pushed.splitlines()[2:]) == [
+        "apps/client portal/package-lock.json",
+        "apps/client portal/package.json",
     ]
