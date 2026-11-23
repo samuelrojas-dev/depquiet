@@ -147,3 +147,122 @@ def test_trailing_zeros_do_not_make_a_release_newer() -> None:
     assert version_key("2.10.0") == version_key("2.10")
     assert version_key("2.10") < version_key("2.10.1") < version_key("3")
     assert version_key("4.0.0") > version_key("3.0.4")
+
+
+def _forking_uv(monkeypatch, report: str = "Update soupsieve v2.8.3 -> v2.10.0, v4.0.0\n"):
+    """Like uv on FinanceDatabase: asked for soupsieve by name, it forks the lock at 3.11.5."""
+    calls = _uv(monkeypatch)
+    pinned = fp._run_lock
+
+    def run(root: Path, executable: str, specs: list[str], timeout: int):
+        if "soupsieve" in specs:
+            calls.append(list(specs))
+            return 0, report, ""
+        return pinned(root, executable, specs, timeout)
+
+    monkeypatch.setattr(fp, "_run_lock", run)
+    return calls
+
+
+def test_a_forked_lock_gives_newer_pythons_the_full_fix(tmp_path, monkeypatch) -> None:
+    """FinanceDatabase PR 269: requires-python kept, 4.1.3 on 3.11.5+, 2.10 below."""
+    _forking_uv(monkeypatch)
+    plan = build_fix_plan(_result(), _project(tmp_path), _checks())
+    [fix] = plan.included
+    assert (fix.version, fix.forked_below) == ("4.0.0", "2.10.0")
+    assert fix.partial == (
+        "Python >=3.11.5 gets 4.0.0, which closes all 5 alerts; older Pythons keep 2.10.0, "
+        "which closes 3"
+    )
+    assert plan.command == "uv lock --upgrade-package soupsieve"
+    assert plan.diff == ""  # pyproject.toml is not touched
+    assert plan.to_dict()["included"][0]["forked_below"] == "2.10.0"
+    row = next(line for line in fix_plan_markdown(plan, _result()).splitlines() if "4.0.0" in line)
+    assert "GHSA-E" in row and "uv locks one release per Python range" in row
+
+
+def test_terminal_output_names_both_copies(tmp_path, monkeypatch, capsys) -> None:
+    import sys
+
+    _forking_uv(monkeypatch)
+    print_fix_plan(build_fix_plan(_result(), _project(tmp_path), _checks()), sys.stdout)
+    out = capsys.readouterr().out
+    assert "✓ soupsieve 2.8.3 → 4.0.0: requires-python unchanged" in out
+    assert "older Pythons keep 2.10.0" in out
+
+
+@pytest.mark.parametrize(
+    "report",
+    [
+        "Update soupsieve v2.8.3 -> v4.0.0\n",  # no fork
+        "Update soupsieve v2.8.3 -> v2.8.3, v3.0.2\n",  # bottom copy does not move
+        "Update soupsieve v2.8.3 -> v2.10.0, v3.0.2\n",  # top copy short of the full fix
+        "Update soupsieve v2.8.3 -> v2.10.0, v4.0.0\nUpdate beautifulsoup4 v4.15.0 -> v4.6.3\n",
+    ],
+)
+def test_a_fork_that_falls_short_falls_back_to_the_pinned_partial_fix(
+    tmp_path, monkeypatch, report
+) -> None:
+    _forking_uv(monkeypatch, report)
+    plan = build_fix_plan(_result(), _project(tmp_path), _checks())
+    [partial] = plan.included
+    assert (partial.version, partial.forked_below) == ("2.10.0", "")
+    assert plan.command == "uv lock --upgrade-package soupsieve==2.10.0"
+
+
+def _financedatabase(tmp_path: Path) -> Path:
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "demo"\nversion = "0.1.0"\nrequires-python = ">=3.11"\n'
+        'dependencies = ["yfinance>=1"]\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "uv.lock").write_text(
+        'version = 1\nrequires-python = ">=3.11"\n\n'
+        '[[package]]\nname = "demo"\nversion = "0.1.0"\nsource = { virtual = "." }\n\n'
+        '[[package]]\nname = "yfinance"\nversion = "1.4.1"\n\n'
+        '[[package]]\nname = "soupsieve"\nversion = "2.8.4"\n',
+        encoding="utf-8",
+    )
+    return tmp_path
+
+
+def test_a_fix_that_moves_another_package_back_is_asked_for_by_name(tmp_path, monkeypatch) -> None:
+    """FinanceDatabase: soupsieve==4.0.0 forked yfinance back to 0.1.96; by name it did not."""
+    monkeypatch.setattr(fp.shutil, "which", lambda name: "/usr/bin/uv")
+
+    def run(root: Path, executable: str, specs: list[str], timeout: int):
+        if "soupsieve" in specs:
+            return 0, "Update soupsieve v2.8.4 -> v2.10.0, v4.1.3\n", ""
+        return (
+            0,
+            ("Update soupsieve v2.8.4 -> v4.0.0\nUpdate yfinance v1.4.1 -> v0.1.96, v1.4.1\n"),
+            "",
+        )
+
+    monkeypatch.setattr(fp, "_run_lock", run)
+    check = FixCheck("resolves", "soupsieve", "4.0.0")
+    plan = build_fix_plan(_result(), _financedatabase(tmp_path), {"soupsieve": check})
+    [fix] = plan.included
+    assert (fix.version, fix.forked_below) == ("4.1.3", "2.10.0")
+    assert "older Pythons keep 2.10.0, which closes 3" in fix.partial
+    assert plan.command == "uv lock --upgrade-package soupsieve"
+    assert not any(c.downgrade for c in plan.lock_changes)
+    assert plan.status == "verified"
+
+
+def test_the_pinned_fix_stays_when_asking_by_name_also_moves_a_package_back(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setattr(fp.shutil, "which", lambda name: "/usr/bin/uv")
+    back = "Update yfinance v1.4.1 -> v0.1.96, v1.4.1\n"
+
+    def run(root: Path, executable: str, specs: list[str], timeout: int):
+        top = "v2.10.0, v4.1.3" if "soupsieve" in specs else "v4.0.0"
+        return 0, f"Update soupsieve v2.8.4 -> {top}\n{back}", ""
+
+    monkeypatch.setattr(fp, "_run_lock", run)
+    check = FixCheck("resolves", "soupsieve", "4.0.0")
+    plan = build_fix_plan(_result(), _financedatabase(tmp_path), {"soupsieve": check})
+    [fix] = plan.included
+    assert (fix.version, fix.forked_below) == ("4.0.0", "")
+    assert plan.command == "uv lock --upgrade-package soupsieve==4.0.0"
