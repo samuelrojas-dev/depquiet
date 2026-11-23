@@ -80,6 +80,23 @@ print(f"projects: {len(runs)}")
 for name, count in outcome.most_common():
     print(f"  {name}: {count}")
 print(f"forked fixes: {len(forked)} in {len({r[0] for r in forked})} projects")
+check = HERE / "advisory_check.csv"
+if check.exists():
+    bad = {
+        (r["repository"], r["package"])
+        for r in csv.DictReader(check.open())
+        if r["new_on_older_copy"] or r["new_on_newer_copy"]
+    }
+    clean = [r for r in forked if (r[0], r[3]) not in bad]
+    print(
+        f"  bringing advisories the locked release did not have: {len(forked) - len(clean)}"
+        f" in {len({r[0] for r in forked if (r[0], r[3]) in bad})} projects"
+    )
+    print(
+        f"  clean: {len(clean)} in {len({r[0] for r in clean})} projects, closing"
+        f" {sum(r[7] for r in clean)} alerts on newer Pythons and {sum(r[8] for r in clean)}"
+        " on older ones"
+    )
 print(f"  by package: {collections.Counter(r[3] for r in forked).most_common()}")
 print(f"  alerts closed on newer Pythons: {sum(r[7] for r in forked)}")
 print(f"  alerts closed on older Pythons too: {sum(r[8] for r in forked)}")

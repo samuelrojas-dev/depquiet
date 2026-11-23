@@ -44,6 +44,7 @@ trusted code.
 from __future__ import annotations
 
 import difflib
+import json
 import os
 import re
 import shutil
@@ -1493,6 +1494,8 @@ def _partial_fixes(
                 _apply(root, [e for i in kept for e in i.edits])
                 if _resolves(root, executable, [*kept, trial], timeout, output) is not None:
                     continue
+            if _brings_new(blocked.package, now, [version], timeout):
+                continue
             closes = sum(1 for v in fixes if version_key(v) <= version_key(version))
             trial.included = True
             trial.partial = (
@@ -1504,6 +1507,62 @@ def _partial_fixes(
             found.append(trial)
             break
     return found
+
+
+def _advisories(package: str, versions: list[str], timeout: int) -> dict[str, list[set[str]]]:
+    """Each version's advisories as alias sets, from pip-audit; empty when it cannot run.
+
+    A partial fix moves the oldest Pythons to a release the scan never saw, and
+    that release can carry advisories of its own. Real case (whisperX,
+    2026-11-23): filelock 3.19.1 had 4 alerts; the 4.1.0 that uv kept for
+    Python 3.10 has 17 others, all fixed only in 4.2.10.
+    """
+    executable = shutil.which("pip-audit")
+    found: dict[str, list[set[str]]] = {}
+    if executable is None:
+        return found
+    with tempfile.TemporaryDirectory(prefix="depquiet-advisories-") as tmp:
+        for n, version in enumerate(dict.fromkeys(versions)):
+            req = Path(tmp) / f"r{n}.txt"
+            out = Path(tmp) / f"o{n}.json"
+            req.write_text(f"{package}=={version}\n", encoding="utf-8")
+            try:
+                subprocess.run(
+                    [
+                        executable,
+                        "-r",
+                        str(req),
+                        "--no-deps",
+                        "--disable-pip",
+                        "-f",
+                        "json",
+                        "--progress-spinner",
+                        "off",
+                        "-o",
+                        str(out),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                    check=False,
+                )
+                data = json.loads(out.read_text(encoding="utf-8"))
+            except (OSError, ValueError, subprocess.TimeoutExpired):
+                return {}
+            vulns = [v for d in data.get("dependencies", []) for v in d.get("vulns", [])]
+            found[version] = [{v["id"], *v.get("aliases", [])} for v in vulns]
+    return found
+
+
+def _brings_new(package: str, now: str, versions: list[str], timeout: int) -> bool:
+    """Whether any of ``versions`` has an advisory that ``now`` does not."""
+    if not now:
+        return False
+    known = _advisories(package, [now, *versions], timeout)
+    if now not in known:
+        return False
+    seen = set().union(*known[now]) if known[now] else set()
+    return any(not (ids & seen) for v in versions for ids in known.get(v, []))
 
 
 def _forked_fix(
@@ -1541,7 +1600,7 @@ def _forked_fix(
     if any(c.downgrade for c in _uv_lock_changes(output[0], [*kept, trial])):
         return None
     closes = sum(1 for v in fixes if version_key(v) <= version_key(low))
-    if not closes:
+    if not closes or _brings_new(blocked.package, now, [low, high], timeout):
         return None
     trial.version, trial.forked_below, trial.included = high, low, True
     trial.partial = (
@@ -1597,6 +1656,8 @@ def _fork_instead(
         ):
             continue
         if any(c.downgrade for c in _uv_lock_changes(output[0], included)):
+            continue
+        if _brings_new(item.package, item.installed, [low, high], timeout):
             continue
         key = _pep503(item.package)
         fixes = [

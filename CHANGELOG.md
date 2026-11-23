@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- uv plans: a partial fix, or a fix by Python range, could move the older Pythons to a release
+  with advisories the locked release did not have, and the plan counted only the alerts it
+  closes. On whisperX, filelock 3.19.1 (4 alerts) became 4.1.0 for Python 3.10, which has 17
+  others. The plan now asks pip-audit for each new release's advisories and drops a fix that
+  brings any new one. The forked-fixes study is corrected: 18 clean fixes in 17 projects, 116
+  alerts closed on newer Pythons, not 32 fixes and 460.
+
 ## [0.58.0] - 2026-11-22
 
 ### Added

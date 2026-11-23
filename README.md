@@ -109,9 +109,11 @@ kept alerts (51%); in 81% of the blocked upgrades, a pin in the project's own
 In a read-only snapshot of popular uv projects (2026-11-20), 40 of the 70 with alerts lock a
 vulnerable package that no fixed release reaches on their oldest supported Python
 ([study](https://github.com/samuelrojas-dev/depquiet/tree/main/research/2026-11-python-floor)).
-Rerunning those projects with 0.58.0 (2026-11-23), 24 of 98 get at least one fix by Python
-range with `requires-python` unchanged: 32 fixes that close 460 alerts on the newer Pythons
-([study](https://github.com/samuelrojas-dev/depquiet/tree/main/research/2026-11-forked-fixes)).
+Rerunning those projects (2026-11-23), 17 of 98 get a clean fix by Python range with
+`requires-python` unchanged: 18 fixes that close 116 alerts on the newer Pythons and 61 on the
+older ones, with no advisory the locked release did not have
+([study](https://github.com/samuelrojas-dev/depquiet/tree/main/research/2026-11-forked-fixes);
+an earlier version of this line said 460, which counted 14 fixes that bring new advisories).
 
 **npm:** on four popular projects (upscayl, nodemon, OpenHands, mathjs; 2026-11-21), the
 plan, applied to a clone, took npm audit from 154 to 97 vulnerable packages, with no
