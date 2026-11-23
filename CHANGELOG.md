@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.58.1] - 2026-11-23
+
 ### Fixed
 - uv plans: a partial fix, or a fix by Python range, could move the older Pythons to a release
   with advisories the locked release did not have, and the plan counted only the alerts it
@@ -1584,7 +1586,8 @@ requirements.txt and npm projects:
 - CI workflow with lint, typecheck, test matrix (3.11/3.12/3.13), and build
 - Automated release workflow with trusted PyPI publishing
 
-[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.58.0...HEAD
+[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.58.1...HEAD
+[0.58.1]: https://github.com/samuelrojas-dev/depquiet/compare/v0.58.0...v0.58.1
 [0.58.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.57.1...v0.58.0
 [0.57.1]: https://github.com/samuelrojas-dev/depquiet/compare/v0.57.0...v0.57.1
 [0.57.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.56.3...v0.57.0

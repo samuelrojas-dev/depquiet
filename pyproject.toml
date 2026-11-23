@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "depquiet"
-version = "0.58.0"
+version = "0.58.1"
 description = "Tells you what to change to close your dependency alerts, verified with your resolver, and which alerts never reach production. uv, Poetry, pip-audit, npm, pnpm, Yarn."
 readme = "README.md"
 license = "MIT"
