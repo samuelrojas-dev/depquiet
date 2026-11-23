@@ -266,3 +266,41 @@ def test_the_pinned_fix_stays_when_asking_by_name_also_moves_a_package_back(
     [fix] = plan.included
     assert (fix.version, fix.forked_below) == ("4.0.0", "")
     assert plan.command == "uv lock --upgrade-package soupsieve==4.0.0"
+
+
+def _advisories_of(table: dict[str, list[set[str]]]):
+    return lambda package, versions, timeout: {v: table[v] for v in versions if v in table}
+
+
+@pytest.mark.advisory_lookups
+def test_a_fork_whose_older_copy_brings_new_advisories_is_not_kept(tmp_path, monkeypatch) -> None:
+    """whisperX: filelock 3.19.1 had 4 alerts, the 4.1.0 kept for Python 3.10 has 17 others."""
+    _forking_uv(monkeypatch)
+    monkeypatch.setattr(
+        fp,
+        "_advisories",
+        _advisories_of({"2.8.3": [{"GHSA-A"}], "2.10.0": [{"GHSA-NEW"}], "4.0.0": []}),
+    )
+    plan = build_fix_plan(_result(), _project(tmp_path), _checks())
+    assert not any(i.forked_below for i in plan.included)
+    assert not any(i.version == "2.10.0" for i in plan.included)  # the pinned one neither
+
+
+@pytest.mark.advisory_lookups
+def test_a_fork_with_only_known_advisories_is_kept(tmp_path, monkeypatch) -> None:
+    _forking_uv(monkeypatch)
+    monkeypatch.setattr(
+        fp,
+        "_advisories",
+        _advisories_of(
+            {"2.8.3": [{"GHSA-A", "CVE-1"}, {"GHSA-B"}], "2.10.0": [{"CVE-1"}], "4.0.0": []}
+        ),
+    )
+    [fix] = build_fix_plan(_result(), _project(tmp_path), _checks()).included
+    assert fix.forked_below == "2.10.0"
+
+
+def test_brings_new_needs_the_current_version_audited(monkeypatch) -> None:
+    monkeypatch.setattr(fp, "_advisories", lambda *a: {})
+    assert fp._brings_new("filelock", "3.19.1", ["4.1.0"], 60) is False
+    assert fp._brings_new("filelock", "", ["4.1.0"], 60) is False

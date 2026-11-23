@@ -10,6 +10,15 @@ installs on the older ones, `requires-python` unchanged, and no other package mo
 That is the change the FinanceDatabase maintainer asked for in review instead of a higher floor,
 and merged ([JerBouma/FinanceDatabase#269](https://github.com/JerBouma/FinanceDatabase/pull/269)).
 
+> **Correction (23 November 2026).** The first version of this page said the 32 fixes close
+> 460 alerts on newer Pythons and 159 on older ones. 14 of those 32 move the older Pythons to a
+> release with advisories of its own that the locked release did not have (filelock 4.1.0,
+> pillow 12.3.0 over pillow 10.4 or 11.3), so they trade old alerts for new ones there. depquiet
+> 0.58.0 counted only the alerts a release closes, not the ones it brings. Without those 14:
+> **18 fixes in 17 projects, closing 116 alerts on newer Pythons and 61 on older ones.** depquiet
+> 0.58.1 checks each new release with pip-audit and no longer proposes the other 14
+> (`advisory_check.csv`).
+
 ## Results
 
 Run on 23 November 2026 (02:03–04:54 UTC), at each project's default branch HEAD (the commit
@@ -17,7 +26,7 @@ is in `forked_fixes.csv` and in each `out/*.json`).
 
 | Outcome | Projects |
 |---|---|
-| At least one fix by Python range | 24 |
+| At least one fix by Python range (17 with a clean one, see the correction) | 24 |
 | Other fixes only (none by Python range) | 25 |
 | No fix fits: every fix needs a newer Python | 8 |
 | Not checked: uv could not build the project from the files fetched | 19 |
@@ -25,19 +34,21 @@ is in `forked_fixes.csv` and in each `out/*.json`).
 | No `uv.lock` at HEAD any more, or the fetch failed | 10 |
 | **Total** | **98** |
 
-In the 24 projects, depquiet found **32 fixes by Python range**: soupsieve 17, filelock 9,
-pillow 5, tornado 1. Together they close **460 alerts on the newer Pythons** of those projects.
-On the older Pythons, the copy that stays behind moves forward too and closes **159** of those
-alerts there (in 31 of the 32 fixes; in pwndbg's filelock it closes none).
+In the 24 projects, depquiet 0.58.0 found 32 fixes by Python range: soupsieve 17, filelock 9,
+pillow 5, tornado 1. The 18 soupsieve and tornado fixes are clean: in 17 projects they close
+**116 alerts on the newer Pythons** and **61 on the older ones**, and neither copy has an
+advisory the locked release did not have. The 9 filelock and 5 pillow fixes close alerts on
+newer Pythons too, but the copy they leave for older Pythons has new advisories (up to 15, for
+filelock 4.1.0 over 3.19.1 or 3.20); 0.58.1 does not propose them.
 
 Typical rows (all in `forked_fixes.csv`):
 
 | Project | Package | Newer Pythons get | Older Pythons keep | Alerts closed (newer / older) |
 |---|---|---|---|---|
-| datalab-to/marker | pillow | 13.0.0 (Python 3.11+) | 12.3.0 | 53 / 17 |
 | zylon-ai/private-gpt | soupsieve | 4.1.3 (Python 3.11.5+) | 2.10 | 8 / 5 |
 | camel-ai/camel | tornado | 6.6.1 (Python 3.11+) | 6.5.10 | 10 / 6 |
-| tirth8205/code-review-graph | filelock | 4.3.0 (Python 3.11+) | 4.1.0 | 12 / 1 |
+| datalab-to/marker | pillow | 13.0.0 (Python 3.11+) | 12.3.0, with 6 advisories 10.4.0 did not have | not clean |
+| tirth8205/code-review-graph | filelock | 4.3.0 (Python 3.11+) | 4.1.0, with 6 advisories 3.32.2 did not have | not clean |
 
 ## What this does and does not show
 
@@ -67,4 +78,7 @@ Typical rows (all in `forked_fixes.csv`):
   VM: `uv lock` can run a project's build hooks.
 - `out/*.json`: the fix plan of each project, as depquiet printed it, with the commit.
 - `log.txt`: the run log (times in UTC).
-- `summarize.py`: rebuilds the counts above and `forked_fixes.csv` from `out/`.
+- `check_advisories.py`: asks pip-audit for the advisories of each fix's locked, older and newer
+  release, and writes `advisory_check.csv` (run on 23 November 2026; needs network).
+- `summarize.py`: rebuilds the counts above and `forked_fixes.csv` from `out/` and
+  `advisory_check.csv`.
