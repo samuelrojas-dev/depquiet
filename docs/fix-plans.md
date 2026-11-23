@@ -167,35 +167,51 @@ by hand.
 #### Partial fixes on your current Python
 
 Each advisory has its own fix, so a release that installs on your current Python can still
-close some of a package's alerts. Without `--raise-python-floor`, the uv plan adds the newest
-such release, checked with uv together with the rest of the plan, and says how many alerts
-it closes and what the others need. Real run on
+close some of a package's alerts. Without `--raise-python-floor`, the uv plan first asks uv for
+the package by name (`uv lock --upgrade-package soupsieve`, no version, `requires-python`
+unchanged). uv can then lock one release per Python range: the full fix on the Pythons that
+can install it, and the newest release that installs on the older ones. Real run on
 [depquiet-floor-test](https://github.com/samuelrojas-dev/depquiet-floor-test)
-(`requires-python >=3.10`):
+(`requires-python >=3.10`), 22 November 2026:
 
 ```
 🔧 Fix plan
-   ✓ pillow 12.2.0 → 12.3.0: the newest fix your Python range allows (closes 13 of 55 alerts; the other 42 need Python >=3.11)
-   ✓ soupsieve 2.8.3 → 2.10.0: the newest fix your Python range allows (closes 5 of 8 alerts; the other 3 need Python >=3.11.5)
+   ✓ pillow 12.2.0 → 13.0.0: requires-python unchanged, uv locks one release per Python range (Python >=3.11 gets 13.0.0, which closes all 55 alerts; older Pythons keep 12.3.0, which closes 13)  (major version change)
+   ✓ soupsieve 2.8.3 → 4.1.3: requires-python unchanged, uv locks one release per Python range (Python >=3.11.5 gets 4.1.3, which closes all 8 alerts; older Pythons keep 2.10, which closes 5)  (major version change)
    ✗ pillow → 13.0.0: needs a newer Python: see Python floor below
    ✗ soupsieve → 4.0.0: needs a newer Python: see Python floor below
+   ...
+   Then run: uv lock --upgrade-package pillow --upgrade-package soupsieve
 ```
 
-On the same repository, Dependabot reported "cannot update soupsieve to a non-vulnerable
+The plan keeps such a fork only when the newer copy reaches the full fix, the older copy
+moves forward and closes at least one alert, and nothing else in the lock moves back.
+Otherwise it pins the newest release that installs on every supported Python and says how
+many alerts that closes ("the newest fix your Python range allows (closes 5 of 8 alerts; the
+other 3 need Python >=3.11.5)"). The ✗ lines stay because the full fix for every Python still
+needs the floor.
+
+The same request by name also replaces a pinned fix that only resolves by moving another
+package back. On FinanceDatabase (`requires-python = ">=3.11, <3.16"`), `soupsieve==4.0.0`
+made uv give Python 3.11.0–3.11.4 yfinance 0.1.96, from 2022. Asked by name, uv kept yfinance
+1.4.1 and gave those Pythons soupsieve 2.10. That is the change the maintainer asked for in
+review and merged
+([JerBouma/FinanceDatabase#269](https://github.com/JerBouma/FinanceDatabase/pull/269)). Real
+run on the commit before that merge:
+
+```
+🔧 Fix plan
+   ✓ soupsieve 2.8.4 → 4.1.3: requires-python unchanged, uv locks one release per Python range (newer Pythons get 4.1.3, which closes all 6 alerts; older Pythons keep 2.10, which closes 3, so nothing else moves back)  (major version change)
+   ✓ urllib3 2.7.0 → 2.8.0: upgrade
+
+   Verified with uv's resolver: all fixes resolve together.
+   Then run: uv lock --upgrade-package soupsieve --upgrade-package urllib3==2.8.0
+```
+
+On depquiet-floor-test, Dependabot reported "cannot update soupsieve to a non-vulnerable
 version" without naming Python
 ([dependabot-core#16987](https://github.com/dependabot/dependabot-core/issues/16987)). With
 `--raise-python-floor` the plan raises the floor instead and adds no partial fix.
-
-When uv can lock one release per Python range, the plan asks for that instead of a single
-older release: `uv lock --upgrade-package soupsieve`, with no version and no change to
-`requires-python`, gives the Pythons that can install the full fix that release and keeps the
-newest release that installs on the older ones. That is what the FinanceDatabase maintainer
-asked for and merged
-([JerBouma/FinanceDatabase#269](https://github.com/JerBouma/FinanceDatabase/pull/269), with
-`requires-python = ">=3.11, <3.16"`): soupsieve 4.1.3 on Python 3.11.5 and newer, 2.10 on
-3.11.0–3.11.4. The plan keeps such a fork only when the newer copy reaches the full fix, the
-older copy moves forward and closes at least one alert, and nothing else in the lock moves
-back; otherwise it falls back to the single partial release above.
 
 Poetry plans do the same: asked to update soupsieve on a `>=3.10` project, Poetry moves it to
 2.10, the newest release that installs there, and the plan keeps that as a partial fix when
