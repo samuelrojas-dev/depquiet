@@ -7,13 +7,13 @@
     "url": "https://github.com/samuelrojas-dev/depquiet",
     "source": "github"
   },
-  "version": "0.57.1",
+  "version": "0.58.0",
   "packages": [
     {
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "depquiet",
-      "version": "0.57.1",
+      "version": "0.58.0",
       "runtimeHint": "uvx",
       "runtimeArguments": [
         {
