@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.58.0] - 2026-11-22
+
 ### Added
 - uv plans: when a fix needs a newer Python than the project's floor, the plan first asks uv
   for the package by name (`uv lock --upgrade-package soupsieve`) and keeps the result when uv
@@ -1574,7 +1576,8 @@ requirements.txt and npm projects:
 - CI workflow with lint, typecheck, test matrix (3.11/3.12/3.13), and build
 - Automated release workflow with trusted PyPI publishing
 
-[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.57.1...HEAD
+[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.58.0...HEAD
+[0.58.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.57.1...v0.58.0
 [0.57.1]: https://github.com/samuelrojas-dev/depquiet/compare/v0.57.0...v0.57.1
 [0.57.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.56.3...v0.57.0
 [0.56.3]: https://github.com/samuelrojas-dev/depquiet/compare/v0.56.2...v0.56.3
