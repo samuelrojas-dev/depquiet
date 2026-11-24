@@ -7,6 +7,7 @@
 [![Python versions](https://img.shields.io/pypi/pyversions/depquiet)](https://pypi.org/project/depquiet/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/samuelrojas-dev/depquiet/blob/main/LICENSE)
 [![codecov](https://codecov.io/gh/samuelrojas-dev/depquiet/graph/badge.svg)](https://codecov.io/gh/samuelrojas-dev/depquiet)
+[![samuelrojas-dev/depquiet MCP server](https://glama.ai/mcp/servers/samuelrojas-dev/depquiet/badges/score.svg)](https://glama.ai/mcp/servers/samuelrojas-dev/depquiet)
 
 **Dependabot says it can't update. depquiet tells you what to change, and checks it with
 your project's own resolver.**
