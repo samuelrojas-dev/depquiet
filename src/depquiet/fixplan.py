@@ -57,7 +57,7 @@ from pathlib import Path
 from typing import Any
 
 from depquiet.fixcheck import FixCheck, _explain, _pep503, _run_lock, _write_lock, fix_targets
-from depquiet.models import ScanResult, Verdict, clip, first_items, version_key
+from depquiet.models import FilterReason, ScanResult, Verdict, clip, first_items, version_key
 
 _REQUIREMENT = re.compile(
     r"^\s*(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)\s*(?P<extras>\[[^\]]*\])?\s*"
@@ -202,6 +202,9 @@ class PythonFloor:
     # it, with older copies below the split: the floor the plan moved to instead.
     refined_from: str = ""
     avoids: list[str] = field(default_factory=list)  # the packages that split held back
+    # Unblocked packages that reach the project only through development
+    # dependencies: a higher floor would cost users an install to clear them.
+    dev_only: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -213,6 +216,7 @@ class PythonFloor:
             "adopted": self.adopted,
             "problem": self.problem or None,
             "refined_from": f">={self.refined_from}" if self.refined_from else None,
+            "dev_only": self.dev_only,
             "avoids_older": self.avoids,
             "edits": [e.__dict__ for e in self.edits],
         }
@@ -1114,6 +1118,12 @@ def _plan_python_floor(
         if (include_filtered or r.verdict is not Verdict.FILTERED)
         and _pep503(r.vuln.package) in keys
     )
+    option.dev_only = [
+        i.package
+        for i in unblocked
+        if (found := [r for r in result.results if _pep503(r.vuln.package) == _pep503(i.package)])
+        and all(FilterReason.DEV_DEPENDENCY in r.reasons for r in found)
+    ]
     return option, (local[0] if unblocked and local else "")
 
 
@@ -2090,6 +2100,12 @@ def python_floor_lines(option: PythonFloor | None, tool: str = "uv") -> list[str
         f"  It drops {drop}: fine for an application, a breaking change for users of a "
         "published library."
     )
+    if option.dev_only:
+        lines.append(
+            f"  {', '.join(option.dev_only)} reach the project only through development "
+            "dependencies: for a library, a higher floor would stop users on older Pythons from "
+            "installing it, to clear alerts in tools they never install."
+        )
     if option.refined_from:
         lines.append(
             f"  >={option.floor}, not >={option.refined_from}: with >={option.refined_from}, uv "

@@ -376,3 +376,27 @@ def test_cli_fix_filtered_needs_a_fix_flag(tmp_path, capsys) -> None:
 
     assert main(["--path", str(tmp_path), "--fix-filtered"]) == 2
     assert "--fix-filtered needs --check-fixes or --fix-plan" in capsys.readouterr().err
+
+
+def test_the_floor_says_when_the_fix_only_reaches_dev_tools(tmp_path, uv) -> None:
+    """nmdc-schema, 2026-11-25: soupsieve came only through the dev group, so the
+    maintainer kept the floor: a higher one would cost downstream users an install."""
+    from depquiet.models import FilterReason
+
+    result = _result()
+    pytest_alert = next(r for r in result.results if r.vuln.package == "pytest")
+    pytest_alert.reasons = [FilterReason.DEV_DEPENDENCY]
+    plan = build_fix_plan(result, _project(tmp_path), _checks())
+    option = plan.python_floor
+    assert option is not None and option.dev_only == ["pytest"]
+    assert plan.to_dict()["python_floor"]["dev_only"] == ["pytest"]
+    lines = fp.python_floor_lines(option)
+    assert any(
+        "pytest reach the project only through development dependencies" in line for line in lines
+    )
+
+
+def test_the_floor_says_nothing_about_dev_tools_for_runtime_fixes(tmp_path, uv) -> None:
+    option = build_fix_plan(_result(), _project(tmp_path), _checks()).python_floor
+    assert option is not None and option.dev_only == []
+    assert not any("development dependencies" in line for line in fp.python_floor_lines(option))
