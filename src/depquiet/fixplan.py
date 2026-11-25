@@ -205,6 +205,11 @@ class PythonFloor:
     # Unblocked packages that reach the project only through development
     # dependencies: a higher floor would cost users an install to clear them.
     dev_only: list[str] = field(default_factory=list)
+    # uv: the ``[tool.uv] environments`` marker that gets the same fixes into the
+    # lock with requires-python unchanged, verified with uv ("" when not checked
+    # or it did not resolve). What wagtail did after a higher floor broke its
+    # downstream projects (2026-11-25).
+    lock_environment: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -217,6 +222,7 @@ class PythonFloor:
             "problem": self.problem or None,
             "refined_from": f">={self.refined_from}" if self.refined_from else None,
             "dev_only": self.dev_only,
+            "lock_environment": self.lock_environment or None,
             "avoids_older": self.avoids,
             "edits": [e.__dict__ for e in self.edits],
         }
@@ -523,6 +529,8 @@ def _edit_text(text: str, edit: PlanEdit) -> str:
         return _set_requires_python(text, edit.old, edit.new)
     if edit.kind == "cooldown":
         return _set_cooldown(text, edit.file, edit.package, edit.new)
+    if edit.kind == "environments":
+        return set_lock_environments(text, edit.new)
     if edit.kind == "poetry":
         return _set_poetry_constraint(text, edit.package, edit.old, edit.new)
     for quote in ('"', "'"):
@@ -1048,6 +1056,65 @@ def _floor_edits(project: Path, floor: str) -> tuple[list[PlanEdit], str, str]:
     return edits, dropped_pythons(lowest, floor) if lowest else "", ""
 
 
+_TOOL_UV = re.compile(r"^\[tool\.uv\][ \t]*(?:#.*)?$", re.MULTILINE)
+_TABLE = re.compile(r"^\[", re.MULTILINE)
+
+
+def set_lock_environments(text: str, marker: str) -> str:
+    """``text`` with ``[tool.uv] environments = [marker]``; unchanged if environments is set.
+
+    uv then resolves the lock only for those Pythons. requires-python, and so
+    who can install the package, stays as it is.
+    """
+    try:
+        data = tomllib.loads(text)
+    except tomllib.TOMLDecodeError:
+        return text
+    uv = (data.get("tool") or {}).get("uv") or {}
+    if "environments" in uv:
+        return text
+    line = f'environments = ["{marker}"]\n'
+    header = _TOOL_UV.search(text)
+    if header:
+        cut = header.end() + 1 if header.end() < len(text) else header.end()
+        new = text[:cut] + ("" if text[cut - 1 : cut] == "\n" else "\n") + line + text[cut:]
+    else:
+        new = text + ("" if text.endswith("\n") else "\n") + "\n[tool.uv]\n" + line
+    try:
+        envs = tomllib.loads(new)["tool"]["uv"]["environments"]
+    except (tomllib.TOMLDecodeError, KeyError, TypeError):
+        return text
+    return new if envs == [marker] else text
+
+
+def _verify_lock_environment(
+    project: Path,
+    executable: str,
+    kept: list[PlanItem],
+    unblocked: list[PlanItem],
+    floor: str,
+    timeout: int,
+) -> str:
+    """The marker if the fixes resolve with it and requires-python unchanged, else ""."""
+    if not (project / "uv.lock").exists() or not (project / "pyproject.toml").exists():
+        return ""
+    marker = f"python_full_version >= '{floor}'"
+    text = (project / "pyproject.toml").read_text(encoding="utf-8")
+    if set_lock_environments(text, marker) == text:
+        return ""
+    edit = PlanEdit("pyproject.toml", "python", "", marker, kind="environments")
+    output: list[str] = []
+    with tempfile.TemporaryDirectory(prefix="depquiet-environments-") as tmp:
+        root = Path(tmp) / "project"
+        shutil.copytree(project, root, ignore=_COPY_IGNORE, symlinks=True)
+        _apply(root, [e for i in kept for e in i.edits] + [edit])
+        if _resolves(root, executable, [*kept, *unblocked], timeout, output) is not None:
+            return ""
+    if output and any(c.downgrade for c in _uv_lock_changes(output[0], [*kept, *unblocked])):
+        return ""
+    return marker
+
+
 def _plan_python_floor(
     project: Path,
     executable: str,
@@ -1118,6 +1185,10 @@ def _plan_python_floor(
         if (include_filtered or r.verdict is not Verdict.FILTERED)
         and _pep503(r.vuln.package) in keys
     )
+    if unblocked and not option.problem:
+        option.lock_environment = _verify_lock_environment(
+            project, executable, kept, unblocked, option.floor, timeout
+        )
     option.dev_only = [
         i.package
         for i in unblocked
@@ -2100,6 +2171,13 @@ def python_floor_lines(option: PythonFloor | None, tool: str = "uv") -> list[str
         f"  It drops {drop}: fine for an application, a breaking change for users of a "
         "published library."
     )
+    if option.lock_environment:
+        lines.append(
+            "  For a library, keep requires-python and add this to pyproject.toml instead: "
+            f'[tool.uv] environments = ["{option.lock_environment}"]. uv then locks only for '
+            "those Pythons, so your CI and development get the fixes and users still install on "
+            "older ones, where the fixes do not apply. Verified with uv's resolver."
+        )
     if option.dev_only:
         lines.append(
             f"  {', '.join(option.dev_only)} reach the project only through development "
