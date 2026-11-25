@@ -82,8 +82,12 @@ tags work without the tags (`run_full.sh`, `repos19.txt`, `out_full/`, `log_full
   older). Together they close 27 alerts on newer Pythons and 17 on older ones.
 - **3 plans pin soupsieve 4.0.0 and give older Pythons beautifulsoup4 4.6.3 (2018)**: prefect,
   streamlink, infinigen. depquiet flags the older beautifulsoup4 and says that raising
-  `requires-python` to 3.11.5 avoids it. It did not find a fork by Python range for these; why
-  is still open.
+  `requires-python` to 3.11.5 avoids it. Why: their locks already fork soupsieve (2.10 below
+  Python 3.11.5; above it, 4.1.3 in prefect, 4.1 in streamlink, 3.0.4 in infinigen), and the
+  plan pinned 4.0.0 because of the alerts on the 2.10 copy. In prefect and streamlink that moves
+  the newer copy back; `uv lock --dry-run` on prefect confirmed it (`soupsieve v2.10, v4.1.3 ->
+  v4.0`). That was a bug, fixed after this run: the plan now leaves such a fix out. infinigen's
+  newer copy (3.0.4) is below 4.0.0, so the fix does not apply there; it was not rerun.
 - 2 runs did not finish because the VM ran out of disk (crewAI, OpenViking), 1 still could not be
   built (data-juicer), and the rest found other fixes or none.
 

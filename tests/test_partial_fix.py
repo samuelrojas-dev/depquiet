@@ -304,3 +304,42 @@ def test_brings_new_needs_the_current_version_audited(monkeypatch) -> None:
     monkeypatch.setattr(fp, "_advisories", lambda *a: {})
     assert fp._brings_new("filelock", "3.19.1", ["4.1.0"], 60) is False
     assert fp._brings_new("filelock", "", ["4.1.0"], 60) is False
+
+
+def test_a_pin_that_moves_a_fixed_copy_back_is_left_out(tmp_path, monkeypatch) -> None:
+    """prefect: the lock already had soupsieve 4.1.3 on 3.11.5+ and 2.10 below."""
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "demo"\nversion = "0.1.0"\nrequires-python = ">=3.10"\n'
+        'dependencies = ["beautifulsoup4"]\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "uv.lock").write_text(
+        'version = 1\nrequires-python = ">=3.10"\n\n'
+        '[[package]]\nname = "demo"\nversion = "0.1.0"\nsource = { virtual = "." }\n\n'
+        '[[package]]\nname = "soupsieve"\nversion = "2.10.0"\n\n'
+        '[[package]]\nname = "soupsieve"\nversion = "4.1.3"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(fp.shutil, "which", lambda name: "/usr/bin/uv")
+    calls: list[list[str]] = []
+
+    def run(root: Path, executable: str, specs: list[str], timeout: int):
+        calls.append(list(specs))
+        return (
+            0,
+            (
+                "Update beautifulsoup4 v4.14.3 -> v4.6.3, v4.14.3\n"
+                "Update soupsieve v2.10.0, v4.1.3 -> v4.0.0\n"
+            ),
+            "",
+        )
+
+    monkeypatch.setattr(fp, "_run_lock", run)
+    check = FixCheck("resolves", "soupsieve", "4.0.0")
+    plan = build_fix_plan(_result(), tmp_path, {"soupsieve": check})
+    assert plan.included == []
+    [item] = plan.items
+    assert "already locked at 4.1.3" in item.why
+    assert "Only raising requires-python fixes the older copy" in item.why
+    assert plan.command == ""
+    assert plan.lock_changes == []
