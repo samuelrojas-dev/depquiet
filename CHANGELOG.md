@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.58.2] - 2026-11-25
+
 ### Fixed
 - uv plans: when the lock already holds a fixed release for newer Pythons and an older copy
   below (prefect: soupsieve 4.1.3 on 3.11.5+, 2.10 below), the alerts on the older copy made the
@@ -1593,7 +1595,8 @@ requirements.txt and npm projects:
 - CI workflow with lint, typecheck, test matrix (3.11/3.12/3.13), and build
 - Automated release workflow with trusted PyPI publishing
 
-[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.58.1...HEAD
+[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.58.2...HEAD
+[0.58.2]: https://github.com/samuelrojas-dev/depquiet/compare/v0.58.1...v0.58.2
 [0.58.1]: https://github.com/samuelrojas-dev/depquiet/compare/v0.58.0...v0.58.1
 [0.58.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.57.1...v0.58.0
 [0.57.1]: https://github.com/samuelrojas-dev/depquiet/compare/v0.57.0...v0.57.1
