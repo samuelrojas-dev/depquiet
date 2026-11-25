@@ -1,0 +1,20 @@
+00:12 1/19 Future-House/paper-qa
+00:13 2/19 MinishLab/semble
+00:13 3/19 OpenMined/PySyft
+00:14 4/19 PrefectHQ/prefect
+00:16 5/19 crewAIInc/crewAI
+00:31 6/19 datajuicer/data-juicer
+00:32 7/19 hyperopt/hyperopt
+00:34 8/19 infobyte/faraday
+00:35 9/19 kornia/kornia
+00:35 10/19 ollama/ollama-python
+00:36 11/19 open-edge-platform/anomalib
+00:37 12/19 princeton-vl/infinigen
+00:38 13/19 pydantic/pydantic
+00:39 14/19 spotify/luigi
+00:40 15/19 streamlink/streamlink
+00:40 16/19 vitalik/django-ninja
+00:43 17/19 volcengine/OpenViking
+00:45 18/19 wagtail/wagtail
+00:46 19/19 zauberzeug/nicegui
+DONE
