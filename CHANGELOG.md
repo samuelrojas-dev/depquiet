@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Python floor: when a fix it would unblock reaches the project only through development
+  dependencies, the plan says so, and that for a library a higher floor costs users on older
+  Pythons an install to clear alerts in tools they never install. The nmdc-schema maintainer kept
+  `requires-python` for exactly that reason (soupsieve came only through the dev group).
+
 ### Changed
 - uv plans: when a fix is left out because the lock already holds the fixed release for newer
   Pythons, the reason now names the exact `requires-python` that would fix the older copy, read
