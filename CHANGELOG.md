@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- uv plans: when a fix is left out because the lock already holds the fixed release for newer
+  Pythons, the reason now names the exact `requires-python` that would fix the older copy, read
+  from the lock's resolution markers ("Only raising requires-python to >=3.11.5 fixes the older
+  copy").
+
 ## [0.58.2] - 2026-11-25
 
 ### Fixed

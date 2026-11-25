@@ -317,7 +317,10 @@ def test_a_pin_that_moves_a_fixed_copy_back_is_left_out(tmp_path, monkeypatch) -
         'version = 1\nrequires-python = ">=3.10"\n\n'
         '[[package]]\nname = "demo"\nversion = "0.1.0"\nsource = { virtual = "." }\n\n'
         '[[package]]\nname = "soupsieve"\nversion = "2.10.0"\n\n'
-        '[[package]]\nname = "soupsieve"\nversion = "4.1.3"\n',
+        '[[package]]\nname = "soupsieve"\nversion = "4.1.3"\nresolution-markers = [\n'
+        "    \"python_full_version >= '3.13'\",\n"
+        "    \"python_full_version == '3.12.*'\",\n"
+        "    \"python_full_version >= '3.11.5' and python_full_version < '3.12'\",\n]\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(fp.shutil, "which", lambda name: "/usr/bin/uv")
@@ -340,6 +343,20 @@ def test_a_pin_that_moves_a_fixed_copy_back_is_left_out(tmp_path, monkeypatch) -
     assert plan.included == []
     [item] = plan.items
     assert "already locked at 4.1.3" in item.why
-    assert "Only raising requires-python fixes the older copy" in item.why
+    assert "Only raising requires-python to >=3.11.5 fixes the older copy" in item.why
     assert plan.command == ""
     assert plan.lock_changes == []
+
+
+def test_copy_floor_reads_the_lowest_python_bound(tmp_path) -> None:
+    (tmp_path / "uv.lock").write_text(
+        '[[package]]\nname = "pillow"\nversion = "13.0.0"\nresolution-markers = [\n'
+        "    \"python_full_version >= '3.12' and sys_platform == 'win32'\",\n"
+        "    \"python_full_version == '3.11.*'\",\n]\n\n"
+        '[[package]]\nname = "pillow"\nversion = "12.3.0"\nresolution-markers = [\n'
+        "    \"sys_platform == 'win32'\",\n]\n",
+        encoding="utf-8",
+    )
+    assert fp._copy_floor(tmp_path, "Pillow", "13.0.0") == "3.11"
+    assert fp._copy_floor(tmp_path, "pillow", "12.3.0") == ""
+    assert fp._copy_floor(tmp_path, "pillow", "9.9.9") == ""

@@ -1612,6 +1612,28 @@ def _forked_fix(
     return trial, output
 
 
+def _copy_floor(project: Path, package: str, version: str) -> str:
+    """The lowest Python a locked copy is for, read from its resolution markers ("3.11.5")."""
+    try:
+        lock = tomllib.loads((project / "uv.lock").read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return ""
+    key = _pep503(package)
+    bounds: list[str] = []
+    for p in lock.get("package", []):
+        if not isinstance(p, dict) or _pep503(str(p.get("name", ""))) != key:
+            continue
+        if str(p.get("version", "")) != version:
+            continue
+        for marker in p.get("resolution-markers", []):
+            found = re.findall(r"python_full_version\s*(>=|==)\s*'([0-9.]+)(\.\*)?'", str(marker))
+            lows = [v for op, v, _ in found if op == ">=" or op == "=="]
+            if not lows:
+                return ""  # a marker with no lower bound: the copy is for every Python
+            bounds.append(max(lows, key=version_key))
+    return min(bounds, key=version_key) if bounds else ""
+
+
 def _keep_top_copies(
     project: Path, executable: str, items: list[PlanItem], timeout: int, report: list[str]
 ) -> None:
@@ -1637,10 +1659,13 @@ def _keep_top_copies(
         ):
             continue
         item.included = False
+        floor = _copy_floor(project, item.package, top[key])
+        raise_to = f" to >={floor}" if floor else ""
         item.why = (
             f"already locked at {top[key]} for the Pythons that can install it; the "
             f"{low.get(key, item.installed)} copy is for older Pythons, and pinning {item.version} "
-            "would move the newer copy back. Only raising requires-python fixes the older copy."
+            f"would move the newer copy back. Only raising requires-python{raise_to} fixes the "
+            "older copy."
         )
         dropped = True
     if not dropped:
