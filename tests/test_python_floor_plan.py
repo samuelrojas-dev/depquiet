@@ -400,3 +400,60 @@ def test_the_floor_says_nothing_about_dev_tools_for_runtime_fixes(tmp_path, uv) 
     option = build_fix_plan(_result(), _project(tmp_path), _checks()).python_floor
     assert option is not None and option.dev_only == []
     assert not any("development dependencies" in line for line in fp.python_floor_lines(option))
+
+
+M = "python_full_version >= '3.11.5'"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        '[project]\nname = "x"\nrequires-python = ">=3.11"\n',
+        '[project]\nname = "x"\n\n[tool.uv]\ndev-dependencies = ["pytest"]\n',
+        '[project]\nname = "x"\n\n[tool.uv.sources]\nfoo = { path = "foo" }\n',
+        '[project]\nname = "x"\n\n[tool.uv]  # settings\npackage = true\n\n'
+        "[tool.ruff]\nline-length = 99\n",
+    ],
+)
+def test_lock_environments_are_added_without_touching_requires_python(text) -> None:
+    import tomllib
+
+    new = fp.set_lock_environments(text, M)
+    data = tomllib.loads(new)
+    assert data["tool"]["uv"]["environments"] == [M]
+    assert data["project"] == tomllib.loads(text)["project"]
+    old_uv = tomllib.loads(text).get("tool", {}).get("uv", {})
+    assert {k: v for k, v in data["tool"]["uv"].items() if k != "environments"} == old_uv
+
+
+def test_existing_lock_environments_are_left_alone() -> None:
+    text = "[tool.uv]\nenvironments = [\"sys_platform == 'linux'\"]\n"
+    assert fp.set_lock_environments(text, M) == text
+
+
+def test_the_floor_offers_lock_environments_for_a_library(tmp_path, monkeypatch) -> None:
+    """wagtail (2026-11-25): a 3.11.5 floor broke downstream projects; [tool.uv]
+    environments got the fix into the lock with requires-python unchanged."""
+
+    def run(root: Path, executable: str, specs: list[str], timeout: int):
+        text = (root / "pyproject.toml").read_text(encoding="utf-8")
+        allowed = '">=3.10"' in text or "environments" in text
+        if any(s.startswith("pytest==") for s in specs) and not allowed:
+            return 1, "", UV_FLOOR_ERROR
+        if not allowed:
+            return 0, "Update tornado v6.4.1 -> v6.5\n", ""
+        return 0, UV_RAISED_REPORT, ""
+
+    monkeypatch.setattr(fp.shutil, "which", lambda name: "/usr/bin/uv")
+    monkeypatch.setattr(fp, "_run_lock", run)
+    project = _project(tmp_path)
+    option = build_fix_plan(_result(), project, _checks()).python_floor
+    assert option is not None and option.lock_environment == "python_full_version >= '3.10'"
+    assert any("[tool.uv] environments" in line for line in fp.python_floor_lines(option))
+    assert "environments" not in (project / "pyproject.toml").read_text(encoding="utf-8")
+
+
+def test_no_lock_environments_line_when_uv_does_not_resolve_it(tmp_path, uv) -> None:
+    option = build_fix_plan(_result(), _project(tmp_path), _checks()).python_floor
+    assert option is not None and option.lock_environment == ""
+    assert not any("environments" in line for line in fp.python_floor_lines(option))

@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- uv plans: when a higher `requires-python` would unblock fixes, the plan also tries
+  `[tool.uv] environments = ["python_full_version >= 'X'"]` on the copy, with `requires-python`
+  unchanged. If uv resolves the fixes that way and nothing moves back, the Python floor section
+  shows the line to add: the lock (CI, development) gets the fixes and the library's users keep
+  installing on older Pythons. That is how wagtail undid the downstream breakage a higher floor
+  caused (`python_floor.lock_environment` in the JSON).
+
+### Added
 - Python floor: when a fix it would unblock reaches the project only through development
   dependencies, the plan says so, and that for a library a higher floor costs users on older
   Pythons an install to clear alerts in tools they never install. The nmdc-schema maintainer kept

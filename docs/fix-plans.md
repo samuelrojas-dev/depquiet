@@ -157,6 +157,27 @@ fix's 9.0.0, because the lock already had 9.2.0 for newer Pythons: the plan does
 it back down. Workspace members whose own floor is lower are raised too. The Action's input
 is `fix-pr-raise-python-floor`.
 
+#### For a library: `[tool.uv] environments`
+
+A higher floor is a breaking change for a library's users, and not only on paper: wagtail
+merged a PR from this project that raised its floor to 3.11.5 for soupsieve, and the next
+nightly run of its downstream package template failed to install wagtail on `>=3.11`. The
+maintainer fixed it within hours by keeping `requires-python = ">=3.11"` and adding
+
+```toml
+[tool.uv]
+environments = ["python_full_version >= '3.11.5'"]
+```
+
+uv then resolves the lock only for Python 3.11.5 and newer, so the project's own CI and
+development get the fixed soupsieve, while users still install wagtail on any 3.11 (where pip
+picks whatever soupsieve installs there). When the floor would unblock fixes in a uv project,
+the plan also tries this on the copy: it adds the marker, leaves `requires-python` alone and
+asks uv again. If the fixes resolve and nothing moves back, the Python floor section shows the
+line to add (`python_floor.lock_environment` in the JSON). A project that already sets
+`environments` is left alone. It is not added to the diff: whether the lock may stop covering
+Python 3.11.0–3.11.4 is the maintainer's call.
+
 Poetry projects get the same option. `poetry update` on a transitive package resolves and
 quietly keeps the old version, so depquiet requires the fix directly on a copy, reads the
 Python each release needs from Poetry's error (`soupsieve (4.1.1) requires Python
