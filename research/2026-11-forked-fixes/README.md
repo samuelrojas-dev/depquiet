@@ -70,6 +70,26 @@ Typical rows (all in `forked_fixes.csv`):
 - **Only the projects of the floor study.** These 98 projects were chosen because they had a
   fix blocked by Python. This says nothing about uv projects in general.
 
+## Second pass: the 19 projects that were not checked
+
+Rerun on 25 November 2026 (00:08–00:46 UTC) with depquiet 0.58.1, a full shallow clone of each
+project, and `SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0` so builds that take their version from git
+tags work without the tags (`run_full.sh`, `repos19.txt`, `out_full/`, `log_full.txt`).
+
+- **3 more fixes by Python range, all clean** (pip-audit finds no advisory on either copy that
+  the locked release did not have): soupsieve in kornia/kornia and pydantic/pydantic (4.1.3 on
+  newer Pythons, 2.10 on older), tornado in spotify/luigi (6.6.1 on Python 3.11+, 6.5.10 on
+  older). Together they close 27 alerts on newer Pythons and 17 on older ones.
+- **3 plans pin soupsieve 4.0.0 and give older Pythons beautifulsoup4 4.6.3 (2018)**: prefect,
+  streamlink, infinigen. depquiet flags the older beautifulsoup4 and says that raising
+  `requires-python` to 3.11.5 avoids it. It did not find a fork by Python range for these; why
+  is still open.
+- 2 runs did not finish because the VM ran out of disk (crewAI, OpenViking), 1 still could not be
+  built (data-juicer), and the rest found other fixes or none.
+
+With both passes: **21 clean fixes by Python range in 20 projects, closing 143 alerts on newer
+Pythons and 78 on older ones**, `requires-python` unchanged.
+
 ## Files
 
 - `repos.txt`: the 98 projects, from `../2026-11-python-floor/blocked_copies_top1000.csv`.
@@ -80,5 +100,6 @@ Typical rows (all in `forked_fixes.csv`):
 - `log.txt`: the run log (times in UTC).
 - `check_advisories.py`: asks pip-audit for the advisories of each fix's locked, older and newer
   release, and writes `advisory_check.csv` (run on 23 November 2026; needs network).
+- `run_full.sh`, `repos19.txt`, `out_full/`, `log_full.txt`: the second pass.
 - `summarize.py`: rebuilds the counts above and `forked_fixes.csv` from `out/` and
   `advisory_check.csv`.
