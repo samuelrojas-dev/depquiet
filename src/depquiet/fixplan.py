@@ -1345,6 +1345,8 @@ def build_fix_plan(
             project, executable, items, floors, result, installed, timeout, include_filtered, report
         )
     if report and not raise_python_floor and any(i.included for i in items):
+        _keep_top_copies(project, executable, items, timeout, report)
+    if report and not raise_python_floor and any(i.included for i in items):
         _fork_instead(project, executable, items, result, timeout, include_filtered, report)
     if option is None and report and any(i.included for i in items):
         split = _avoid_split(
@@ -1608,6 +1610,52 @@ def _forked_fix(
         f"Pythons keep {low}, which closes {closes}"
     )
     return trial, output
+
+
+def _keep_top_copies(
+    project: Path, executable: str, items: list[PlanItem], timeout: int, report: list[str]
+) -> None:
+    """Leave out a pinned fix that would move back a copy the lock already has fixed.
+
+    Real case (prefect, 2026-11-25): the lock already holds soupsieve 4.1.3 for
+    Python 3.11.5+ and 2.10 below. The alerts on the 2.10 copy made the plan pin
+    ``soupsieve==4.0.0``, which took the newer Pythons from 4.1.3 back to 4.0 and
+    gave the older ones beautifulsoup4 4.6.3 (2018). Only a higher
+    requires-python fixes the 2.10 copy.
+    """
+    top = _locked_versions(project, highest=True)
+    low = _locked_versions(project)
+    dropped = False
+    for item in items:
+        key = _pep503(item.package)
+        if (
+            not item.included
+            or item.carried
+            or item.forked_below
+            or key not in top
+            or version_key(top[key]) <= version_key(item.version)
+        ):
+            continue
+        item.included = False
+        item.why = (
+            f"already locked at {top[key]} for the Pythons that can install it; the "
+            f"{low.get(key, item.installed)} copy is for older Pythons, and pinning {item.version} "
+            "would move the newer copy back. Only raising requires-python fixes the older copy."
+        )
+        dropped = True
+    if not dropped:
+        return
+    kept = [i for i in items if i.included]
+    if not kept:
+        report.clear()
+        return
+    output: list[str] = []
+    with tempfile.TemporaryDirectory(prefix="depquiet-keep-") as tmp:
+        root = Path(tmp) / "project"
+        shutil.copytree(project, root, ignore=_COPY_IGNORE, symlinks=True)
+        _apply(root, [e for i in kept for e in i.edits])
+        if _resolves(root, executable, kept, timeout, output) is None and output:
+            report[:] = output
 
 
 def _fork_instead(

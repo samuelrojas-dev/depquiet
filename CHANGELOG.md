@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- uv plans: when the lock already holds a fixed release for newer Pythons and an older copy
+  below (prefect: soupsieve 4.1.3 on 3.11.5+, 2.10 below), the alerts on the older copy made the
+  plan pin `soupsieve==4.0.0`. That moved the newer Pythons from 4.1.3 back to 4.0 and gave the
+  older ones beautifulsoup4 4.6.3. The plan now leaves such a fix out and says that only a higher
+  `requires-python` fixes the older copy.
+
 ## [0.58.1] - 2026-11-23
 
 ### Fixed
