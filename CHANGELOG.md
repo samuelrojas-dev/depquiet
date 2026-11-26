@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- When the plan is empty and a higher `requires-python` would help, the terminal no longer says
+  "--raise-python-floor" twice: the Python floor section already says it.
+
 ## [0.59.0] - 2026-11-25
 
 ### Added
