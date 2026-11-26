@@ -93,16 +93,20 @@ On a public uv SDK with 71 open Dependabot alerts and `requires-python = ">=3.9"
 Its maintainers had reached the same "raise the floor and relock" change by hand, as had
 the maintainers of another uv project whose Dependabot pytest update had failed four times.
 
-**Merged upstream:** in [beets](https://github.com/beetbox/beets/pull/7202), a dependency
-update had left the soupsieve alerts open, because uv kept a vulnerable soupsieve for
-Python 3.11.0–3.11.4. The fix depquiet points to, `requires-python = ">=3.11.5"` and one
-soupsieve (4.1.3) in the lock, was reviewed and merged by the beets maintainers on
-21 November 2026. pip-audit counts 4 soupsieve advisories before and 0 after.
-In [FinanceDatabase](https://github.com/JerBouma/FinanceDatabase/pull/269) the maintainer
-preferred to keep `requires-python = ">=3.11, <3.16"` and merged a split lock on 22 November
-2026: soupsieve 4.1.3 for Python 3.11.5 and newer, 2.10 for 3.11.0–3.11.4. pip-audit counts
-6 soupsieve advisories before and 3 after, all on the 2.10 copy that only Python 3.11.0–3.11.4
-installs.
+**Merged upstream.** These pull requests came from depquiet plans and were reviewed and merged
+by each project's maintainers (all in November 2026, all for soupsieve):
+
+| Project | What was merged | How it went |
+|---|---|---|
+| [beets](https://github.com/beetbox/beets/pull/7202) | `requires-python = ">=3.11.5"`, one soupsieve 4.1.3 | Merged as proposed. pip-audit: 4 soupsieve advisories before, 0 after. |
+| [FinanceDatabase](https://github.com/JerBouma/FinanceDatabase/pull/269) | Lock split by Python: 4.1.3 on 3.11.5+, 2.10 below | The maintainer asked to keep the floor; depquiet learned that split from this review (0.58.0). 6 before, 3 after, all on the 2.10 copy. |
+| [Horizon](https://github.com/Thysrael/Horizon/pull/252) | `requires-python = ">=3.11.5"`, one soupsieve 4.1.3 | Merged as proposed. |
+| [wagtail](https://github.com/wagtail/wagtail/pull/14831) | `requires-python = ">=3.11.5"`, one soupsieve 4.1.3 | **Broke the nightly install of wagtail in a downstream project** (`>=3.11`). A maintainer fixed it within hours by keeping the floor and setting `[tool.uv] environments`; depquiet now offers that for libraries (0.59.0). |
+| [banana-slides](https://github.com/Anionex/banana-slides/pull/684) | Lock split by Python, Python 3.10 still supported | Merged as proposed. |
+
+Not every suggestion was taken: in an issue on nmdc-schema, the maintainer kept `requires-python = ">=3.11"`
+because soupsieve reached it only through the dev group, and a higher floor would have cost
+downstream packages an install. depquiet now says when that is the case (0.59.0).
 
 Across 18 uv projects (2026-11-12), uv's resolver rejected the nearest fix for 502 of 991
 kept alerts (51%); in 81% of the blocked upgrades, a pin in the project's own
