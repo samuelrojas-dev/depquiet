@@ -1044,13 +1044,6 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
                 print(
                     f"   Nothing in the plan yet, so {files} {verb} not written.", file=sys.stderr
                 )
-            floor = fix_plan.python_floor
-            if floor is not None and floor.unblocked and not floor.adopted:
-                print(
-                    "   Run again with --raise-python-floor to plan the requires-python change "
-                    "described above.",
-                    file=sys.stderr,
-                )
         if args.apply and fix_plan.included:
             lockfile = lockfile_name(fix_plan.tool)
             problem = apply_fix_plan(fix_plan, args.path)

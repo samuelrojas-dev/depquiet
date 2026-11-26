@@ -46,7 +46,8 @@ def test_both_files_are_named(tmp_path, monkeypatch, capsys) -> None:
         str(report),
     )
     assert f"Nothing in the plan yet, so {diff} and {report} were not written." in err
-    assert "Run again with --raise-python-floor" in err
+    # The Python floor section already says it; once is enough (seen on stac-auth-proxy).
+    assert err.count("--raise-python-floor") == 1
     assert not diff.exists() and not report.exists()
 
 
