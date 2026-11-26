@@ -27,6 +27,10 @@ git apply plan.diff             # then run the lock command it prints
 
 Or try it without installing anything: `uvx --with pip-audit depquiet --fix-plan`.
 
+Five projects have merged pull requests that came from depquiet plans, wagtail among them,
+and one of those merges broke something downstream: [the table](#merged-upstream) says what
+happened in each.
+
 ## Before and after
 
 A project pins `requests==2.31.0` and `botocore==1.29.0`, and botocore holds urllib3 back.
@@ -93,7 +97,7 @@ On a public uv SDK with 71 open Dependabot alerts and `requires-python = ">=3.9"
 Its maintainers had reached the same "raise the floor and relock" change by hand, as had
 the maintainers of another uv project whose Dependabot pytest update had failed four times.
 
-**Merged upstream.** These pull requests came from depquiet plans and were reviewed and merged
+<a id="merged-upstream"></a>**Merged upstream.** These pull requests came from depquiet plans and were reviewed and merged
 by each project's maintainers (all in November 2026, all for soupsieve):
 
 | Project | What was merged | How it went |
