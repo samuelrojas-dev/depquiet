@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.59.0] - 2026-11-25
+
 ### Added
 - uv plans: when a higher `requires-python` would unblock fixes, the plan also tries
   `[tool.uv] environments = ["python_full_version >= 'X'"]` on the copy, with `requires-python`
@@ -1615,7 +1617,8 @@ requirements.txt and npm projects:
 - CI workflow with lint, typecheck, test matrix (3.11/3.12/3.13), and build
 - Automated release workflow with trusted PyPI publishing
 
-[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.58.2...HEAD
+[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.59.0...HEAD
+[0.59.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.58.2...v0.59.0
 [0.58.2]: https://github.com/samuelrojas-dev/depquiet/compare/v0.58.1...v0.58.2
 [0.58.1]: https://github.com/samuelrojas-dev/depquiet/compare/v0.58.0...v0.58.1
 [0.58.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.57.1...v0.58.0
