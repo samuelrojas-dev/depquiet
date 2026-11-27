@@ -115,7 +115,8 @@ def dashboard_markdown(
     floor = plan.python_floor if plan else None
 
     fixed: list[tuple[_Package, PlanItem]] = []
-    held: dict[str, list[_Package]] = {}
+    # (blocker, "semgrep 1.187.0 → 1.136.0" when an older release of it allows the fix)
+    held: dict[tuple[str, str], list[_Package]] = {}
     change: list[tuple[_Package, str]] = []
     no_fix: list[_Package] = []
     has_fix: list[_Package] = []
@@ -129,7 +130,8 @@ def dashboard_markdown(
             fixed.append((pkg, item))
         elif item is not None and item.blocked_by:
             for blocker in item.blocked_by:
-                held.setdefault(blocker, []).append(pkg)
+                older = next((n for n in item.needs_older if n.startswith(f"{blocker} ")), "")
+                held.setdefault((blocker, older), []).append(pkg)
         elif item is not None and floor is not None and item.package in floor.unblocked:
             option = f"raising requires-python to >={floor.floor} lets it install (verified)"
             if floor.lock_environment:
@@ -206,13 +208,21 @@ def dashboard_markdown(
             )
     if held:
         lines += ["", "### ⛓ Held back by another package", ""]
-        for blocker, pkgs in sorted(held.items(), key=lambda kv: -advisories(kv[1])):
+        for (blocker, older), pkgs in sorted(held.items(), key=lambda kv: -advisories(kv[1])):
             names = first_items([f"`{p.name}`" for p in pkgs], 6)
-            lines.append(
-                f"- **`{blocker}`** holds back {names} ({_advisories(advisories(pkgs))}). No "
-                f"release of `{blocker}` lets these fixes in yet, so only a change in "
-                f"`{blocker}` unblocks them: nothing in this project can."
-            )
+            count = _advisories(advisories(pkgs))
+            if older:
+                lines.append(
+                    f"- **`{blocker}`** holds back {names} ({count}). Only an older `{blocker}` "
+                    f"allows the fix ({older}): moving your own dependency back is your call, so "
+                    "the fix pull request leaves it out."
+                )
+            else:
+                lines.append(
+                    f"- **`{blocker}`** holds back {names} ({count}). No release of `{blocker}` "
+                    f"lets these fixes in yet, so only a change in `{blocker}` unblocks them: "
+                    "nothing in this project can."
+                )
     if change:
         lines += ["", "### 🔧 Needs a change in your project", ""]
         lines += [f"- `{p.name}` ({_row(p)}): {why}" for p, why in change]

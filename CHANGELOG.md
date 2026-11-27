@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- uv plans leave out a fix that only fits by moving one of the project's own dependencies
+  back, and report it as held back by that dependency with the older release that would allow
+  it, instead of putting it in the plan with a warning. Real case: on the depquiet-floor-test
+  demo, fixing mcp moved semgrep, a direct dependency, from 1.187.0 back to 1.136.0 (and 16
+  other packages); now pillow and soupsieve are fixed and mcp is reported as "fits only by
+  moving semgrep back from 1.187.0 to 1.136.0". Moving transitive packages back, or giving
+  only older Pythons an older copy in a forked lock, still only warns. JSON: `needs_older`.
+- Dashboard: a package held back by another one says whether an older release of it allows
+  the fix (your call) or none does (only a change upstream unblocks it).
+
 ## [0.60.0] - 2026-11-27
 
 ### Added
