@@ -135,10 +135,17 @@ def test_only_the_blockers_that_cap_the_fix_are_named(monkeypatch) -> None:
         ("wcmatch~=8.3", "11.2", True),
         ("wcmatch<12,>=10.1", "11.2", False),
         ("PyPDF2", "3.9.0", False),
+        ("langgraph-sdk<0.5.0,>=0.4.6", "0.4.4", False),
+        ("tornado<=6.5.10,>=6.5.10", "6.6.1", True),
+        ("mcp==1.31.0", "1.30.0", False),
+        ("mcp==1.29.0", "1.30.0", True),
+        ("hydra-core<=1.3.2,>1.3", "1.3.6", True),
+        ("wcmatch~=11.3", "11.2", False),
+        ("lightning==2.4.*", "2.6.6", True),
     ],
 )
-def test_excludes(requirement, version, excluded) -> None:
-    assert fp._excludes(requirement, version) is excluded
+def test_caps(requirement, version, excluded) -> None:
+    assert fp._caps(requirement, version) is excluded
 
 
 @pytest.mark.python_lookups

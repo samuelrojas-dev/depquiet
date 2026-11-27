@@ -1602,14 +1602,23 @@ def _unparen(requirement: str) -> str:
     return head.replace("(", " ").replace(")", " ") + sep + marker
 
 
-def _excludes(requirement: str, version: str) -> bool:
-    """Whether a requirement's version clauses leave ``version`` out (markers ignored)."""
+def _caps(requirement: str, version: str) -> bool:
+    """Whether a requirement keeps its package below the fixed ``version`` (markers ignored).
+
+    Only an upper bound does: a floor above the fix (langgraph 1.2.24 requires
+    langgraph-sdk>=0.4.6, past the 0.4.4 fix) still lets a fixed release in.
+    """
     match = _REQUIREMENT.match(_unparen(requirement))
     if not match:
         return False
     for clause in (c.strip() for c in match.group("spec").split(",")):
         parsed = _CLAUSE.match(clause) if clause else None
-        if parsed and not _satisfies(version, parsed.group(1), parsed.group(2)):
+        if parsed is None or parsed.group(1) in (">", ">=", "!="):
+            continue
+        op, bound = parsed.group(1), parsed.group(2)
+        if not _satisfies(version, op, bound) and version_key(version) >= version_key(
+            bound.removesuffix(".*")
+        ):
             return True
     return False
 
@@ -1633,7 +1642,7 @@ def _explain_blockers(item: PlanItem, blockers: list[str], explain: str) -> None
         if found is None:
             continue
         release, requirements = found
-        caps = [r for r in requirements if _excludes(r, item.version)]
+        caps = list(dict.fromkeys(r for r in requirements if _caps(r, item.version)))
         if caps:
             capped[blocker] = f"{blocker} {release} requires {', '.join(caps)}"
         else:
