@@ -645,6 +645,16 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
         "Drops support for the older Python versions",
     )
     parser.add_argument(
+        "--dashboard",
+        type=Path,
+        default=None,
+        metavar="FILE",
+        help="Write every vulnerable package's state as Markdown (the Action's dashboard "
+        "issue): fixed by the plan, held back by another package, needs a change in your "
+        "project, no fixed release yet, or deprioritized. Uses the --fix-plan result when "
+        "there is one",
+    )
+    parser.add_argument(
         "--fix-plan-report",
         type=Path,
         default=None,
@@ -1090,6 +1100,41 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
                 "alert, not a full inventory.",
                 file=sys.stderr,
             )
+
+    if args.dashboard is not None:
+        import datetime
+        import os
+
+        from depquiet.dashboard import dashboard_markdown
+
+        # The Action fills in the fix pull request's link once it exists.
+        keep = os.environ.get("DEPQUIET_DASHBOARD_PR_PLACEHOLDER") == "1"
+        npm_versions: dict[str, str] = {}
+        if (args.path / "package-lock.json").is_file():
+            from depquiet.npmplan import _packages as npm_lock_packages
+
+            try:
+                npm_versions = {
+                    key.removeprefix("node_modules/").lower(): str(info.get("version", ""))
+                    for key, info in npm_lock_packages(args.path).items()
+                    if key.startswith("node_modules/") and "/node_modules/" not in key
+                }
+            except (OSError, ValueError):
+                npm_versions = {}
+        args.dashboard.write_text(
+            dashboard_markdown(
+                result,
+                fix_plan,
+                __version__,
+                datetime.date.today().isoformat(),
+                pr_line=None
+                if keep
+                else "Apply it with `depquiet --fix-plan --apply`, or let the Action's "
+                "`fix-pr` open the pull request.",
+                installed=npm_versions,
+            ),
+            encoding="utf-8",
+        )
 
     if merged.summary:
         write_summary(result, merged.summary)

@@ -140,6 +140,9 @@ class PlanItem:
     # npm: who holds the vulnerable copy back ("typography 0.5.19 requires
     # postcss-selector-parser@6.0.10"), and npm audit's own fix when it is a downgrade.
     held_by: list[str] = field(default_factory=list)
+    # Packages that hold this fix back and that no release of lets it in: only a
+    # change in them unblocks it (the dashboard groups alerts by them).
+    blocked_by: list[str] = field(default_factory=list)
     audit_note: str = ""
     # npm: copies of the package the plan leaves, and why ("glob 10.5.0 under ...").
     leaves: str = ""
@@ -394,6 +397,7 @@ class FixPlan:
                     "version": i.version,
                     "why": i.why,
                     "held_by": i.held_by,
+                    "blocked_by": i.blocked_by,
                     "npm_audit_note": i.audit_note or None,
                 }
                 for i in self.left_out
@@ -1404,6 +1408,8 @@ def build_fix_plan(
             chained = _plan_chain(project, executable, item, check.also_upgrade, installed, timeout)
             if isinstance(chained, str):
                 item.why = chained
+                if chained.startswith("blocked by") and "no version of" in chained:
+                    item.blocked_by = list(check.also_upgrade)
         elif check.reason == "python" and check.python_floor:
             floors[package] = check.python_floor
             item.why = check.next_step

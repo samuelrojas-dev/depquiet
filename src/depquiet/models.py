@@ -183,6 +183,9 @@ class Vulnerability:
     # (npm audit: the fix for a transitive package is often a new version of
     # the direct dependency that pulls it in). Empty means this package.
     fix_package: str = ""
+    # npm audit's ``fixAvailable: true``: ``npm audit fix`` fixes it within the
+    # declared ranges, and npm names no version.
+    fix_in_range: bool = False
     # Which functions in the package are vulnerable (from advisory)
     vulnerable_functions: list[str] = field(default_factory=list)
     # Whether it's a direct or transitive dependency

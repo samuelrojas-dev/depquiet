@@ -70,6 +70,45 @@ that holds secrets while checking out outside contributions.
 the step. Diff summaries and PR comments use the saved scan, including when findings
 cause the scanning step to fail; they do not run another scan.
 
+### Dashboard issue (`dashboard`)
+
+With `dashboard: "true"`, the Action keeps one issue, **depquiet: dependency alerts**, that
+gives every vulnerable package a state and what to do about it, updated on every run:
+
+- **Fixed in the fix pull request**, with its link (when `fix-pr` is on), and a warning when
+  the fixes only fit by moving other packages back.
+- **Held back by another package**, grouped by that package, when no release of it lets the
+  fix in: only a change there unblocks it, nothing in your project can.
+- **Needs a change in your project**, with the verified option (`requires-python`, or
+  `[tool.uv] environments` for a library).
+- **No fixed version reported**, and **deprioritized** (development-only, test-only, ...),
+  which depquiet never dismisses.
+
+```yaml
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+steps:
+  - uses: actions/checkout@v4
+  - uses: samuelrojas-dev/depquiet@v0
+    with:
+      fix-pr: "true"
+      dashboard: "true"
+      fail-on-action: "false"
+```
+
+Real run on [depquiet-floor-test](https://github.com/samuelrojas-dev/depquiet-floor-test/issues/4),
+a demo branch with old pillow and soupsieve plus semgrep: 71 advisories in 5 packages; 68 fixed
+in [one pull request](https://github.com/samuelrojas-dev/depquiet-floor-test/pull/3) (two of
+the fixes need a newer Python, which is why Dependabot could not open them), and 3 held back by
+semgrep. On wagtail's main branch the same section names semgrep as what holds back mcp,
+opentelemetry-api and wcmatch (8 advisories).
+
+The issue comes from depquiet's own scan of the lockfile, not from the Security tab: a
+workflow's `GITHUB_TOKEN` gets 403 on the Dependabot alerts API, with or without
+`security-events`. Counts can differ a little from GitHub's.
+
 ## GitHub Actions (manual)
 
 ```yaml
