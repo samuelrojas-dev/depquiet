@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.60.1] - 2026-11-27
+
 ### Changed
 - uv plans leave out a fix that only fits by moving one of the project's own dependencies
   back, and report it as held back by that dependency with the older release that would allow
@@ -1679,7 +1681,8 @@ requirements.txt and npm projects:
 - CI workflow with lint, typecheck, test matrix (3.11/3.12/3.13), and build
 - Automated release workflow with trusted PyPI publishing
 
-[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.60.0...HEAD
+[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.60.1...HEAD
+[0.60.1]: https://github.com/samuelrojas-dev/depquiet/compare/v0.60.0...v0.60.1
 [0.60.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.59.2...v0.60.0
 [0.59.2]: https://github.com/samuelrojas-dev/depquiet/compare/v0.59.1...v0.59.2
 [0.59.1]: https://github.com/samuelrojas-dev/depquiet/compare/v0.59.0...v0.59.1
