@@ -195,8 +195,33 @@ def test_cvss3_metric_order_and_temporal_metrics_do_not_lower_base() -> None:
 
 
 def test_unknown_vector_without_declared_severity_does_not_silently_become_moderate() -> None:
-    with pytest.raises(ScanError, match=r"cannot determine OSV\.dev severity"):
-        _osv_severity({"severity": [{"type": "CVSS_V4", "score": "CVSS:4.0/AV:N/AC:L"}]})
+    """Unknown, not moderate, and not the end of the scan (textual, 2026-11-27)."""
+    assert _osv_severity({"severity": [{"type": "CVSS_V4", "score": "CVSS:4.0/AV:N/AC:L"}]}) is None
+
+
+def test_an_advisory_with_an_unscorable_vector_is_kept_as_unknown_severity() -> None:
+    response = {
+        "results": [
+            {
+                "vulns": [
+                    {
+                        "id": "PYSEC-2026-4320",
+                        "severity": [{"type": "CVSS_V4", "score": "CVSS:4.0/AV:N/AC:L"}],
+                        "affected": [
+                            {
+                                "package": {"name": "x"},
+                                "ranges": [{"events": [{"introduced": "0"}, {"fixed": "2"}]}],
+                            }
+                        ],
+                    }
+                ]
+            }
+        ]
+    }
+    (vuln,) = parse_osv_response(response, [("x", "1", "PyPI")])
+    assert vuln.severity_known is False
+    assert vuln.severity_label == "unknown"
+    assert vuln.fix_version == "2"
 
 
 def test_declared_severity_supported_without_scoring_unknown_vector() -> None:

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- OSV.dev fallback: an advisory whose only severity is a vector depquiet cannot score (CVSS v4)
+  is kept with an unknown severity instead of ending the whole scan. Found by the Blocker Index
+  study: textual's `poetry.lock` stopped at PYSEC-2026-4320, and every other alert went unreported.
+
 ## [0.60.2] - 2026-11-27
 
 ### Fixed
