@@ -88,6 +88,7 @@ markers = [
     "live: requires network access (deselect with '-m not live')",
     "cve_alias_lookups: let the scan call resolve_cve_aliases (HTTP is faked in the test)",
     "advisory_lookups: let fix plans call _advisories (pip-audit is faked in the test)",
+    "python_lookups: let fix plans call _release_pythons (PyPI is faked in the test)",
 ]
 
 [tool.ruff]
