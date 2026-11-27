@@ -6,17 +6,11 @@
   "errors": 5,
   "action_advisories": 8007,
   "fixed_advisories": 4623,
-  "held_advisories": 412,
-  "blockers": 29,
+  "held_advisories": 223,
+  "blockers": 13,
   "python_floor_repos": 33,
   "python_floor_advisories": 1170,
   "top": [
-    [
-      "crawl4ai",
-      2,
-      2,
-      107
-    ],
     [
       "tensordict",
       2,
@@ -30,25 +24,7 @@
       4
     ],
     [
-      "daphne",
-      2,
-      1,
-      2
-    ],
-    [
-      "camel-ai",
-      1,
-      6,
-      65
-    ],
-    [
       "pandasai",
-      1,
-      1,
-      53
-    ],
-    [
-      "llama-index-core",
       1,
       1,
       53
@@ -66,22 +42,10 @@
       42
     ],
     [
-      "optimum",
+      "camel-ai",
       1,
-      1,
-      38
-    ],
-    [
-      "pre-commit",
-      1,
-      1,
-      19
-    ],
-    [
-      "fastmcp",
-      1,
-      1,
-      8
+      3,
+      10
     ],
     [
       "semgrep",
@@ -100,6 +64,30 @@
       1,
       3,
       5
+    ],
+    [
+      "azureml-core",
+      1,
+      2,
+      5
+    ],
+    [
+      "exp-mitmproxy",
+      1,
+      1,
+      4
+    ],
+    [
+      "argostranslate",
+      1,
+      1,
+      1
+    ],
+    [
+      "multi-storage-client",
+      1,
+      1,
+      1
     ]
   ]
 }

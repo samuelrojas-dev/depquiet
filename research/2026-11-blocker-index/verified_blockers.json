@@ -1,0 +1,365 @@
+[
+ {
+  "repo": "PostHog/posthog",
+  "held": "langchain-text-splitters",
+  "fix_version": "1.1.2",
+  "blocker": "langchain",
+  "newest": "1.5.2",
+  "caps": [],
+  "confirmed": false
+ },
+ {
+  "repo": "PostHog/posthog",
+  "held": "langgraph-sdk",
+  "fix_version": "0.4.4",
+  "blocker": "langgraph",
+  "newest": "1.2.24",
+  "caps": [],
+  "confirmed": false
+ },
+ {
+  "repo": "PostHog/posthog",
+  "held": "opentelemetry-api",
+  "fix_version": "1.45.2",
+  "blocker": "opentelemetry-sdk",
+  "newest": "1.45.2",
+  "caps": [],
+  "confirmed": false
+ },
+ {
+  "repo": "PostHog/posthog",
+  "held": "opentelemetry-api",
+  "fix_version": "1.45.2",
+  "blocker": "dagster-cloud",
+  "newest": "1.13.31",
+  "caps": [],
+  "confirmed": false
+ },
+ {
+  "repo": "PostHog/posthog",
+  "held": "transformers",
+  "fix_version": "5.10.0",
+  "blocker": "optimum",
+  "newest": "2.3.0",
+  "caps": [],
+  "confirmed": false
+ },
+ {
+  "repo": "camel-ai/camel",
+  "held": "pillow",
+  "fix_version": "13.0.0",
+  "blocker": "crawl4ai",
+  "newest": "0.9.6",
+  "caps": [],
+  "confirmed": false
+ },
+ {
+  "repo": "camel-ai/camel",
+  "held": "pypdf2",
+  "fix_version": "3.9.0",
+  "blocker": "arxiv2text",
+  "newest": "0.1.14",
+  "caps": [],
+  "confirmed": false
+ },
+ {
+  "repo": "camel-ai/camel",
+  "held": "virtualenv",
+  "fix_version": "21.14.10",
+  "blocker": "pre-commit",
+  "newest": "4.7.0",
+  "caps": [],
+  "confirmed": false
+ },
+ {
+  "repo": "camel-ai/owl",
+  "held": "datasets",
+  "fix_version": "5.0.1",
+  "blocker": "camel-ai",
+  "newest": "0.2.90",
+  "caps": [
+   "datasets<4,>=3"
+  ],
+  "confirmed": true
+ },
+ {
+  "repo": "camel-ai/owl",
+  "held": "fsspec",
+  "fix_version": "2026.6.0",
+  "blocker": "datasets",
+  "newest": "5.2.0",
+  "caps": [],
+  "confirmed": false
+ },
+ {
+  "repo": "camel-ai/owl",
+  "held": "fsspec",
+  "fix_version": "2026.6.0",
+  "blocker": "camel-ai",
+  "newest": "0.2.90",
+  "caps": [],
+  "confirmed": false
+ },
+ {
+  "repo": "camel-ai/owl",
+  "held": "lxml",
+  "fix_version": "6.1.0",
+  "blocker": "crawl4ai",
+  "newest": "0.9.6",
+  "caps": [],
+  "confirmed": false
+ },
+ {
+  "repo": "camel-ai/owl",
+  "held": "lxml",
+  "fix_version": "6.1.0",
+  "blocker": "camel-ai",
+  "newest": "0.2.90",
+  "caps": [],
+  "confirmed": false
+ },
+ {
+  "repo": "camel-ai/owl",
+  "held": "pillow",
+  "fix_version": "13.0.0",
+  "blocker": "crawl4ai",
+  "newest": "0.9.6",
+  "caps": [],
+  "confirmed": false
+ },
+ {
+  "repo": "camel-ai/owl",
+  "held": "pillow",
+  "fix_version": "13.0.0",
+  "blocker": "camel-ai",
+  "newest": "0.2.90",
+  "caps": [],
+  "confirmed": false
+ },
+ {
+  "repo": "camel-ai/owl",
+  "held": "unstructured",
+  "fix_version": "0.24.1",
+  "blocker": "camel-ai",
+  "newest": "0.2.90",
+  "caps": [
+   "unstructured==0.16.20"
+  ],
+  "confirmed": true
+ },
+ {
+  "repo": "camel-ai/owl",
+  "held": "yt-dlp",
+  "fix_version": "2026.7.4",
+  "blocker": "camel-ai",
+  "newest": "0.2.90",
+  "caps": [
+   "yt-dlp<2025,>=2024.11.4"
+  ],
+  "confirmed": true
+ },
+ {
+  "repo": "chidiwilliams/buzz",
+  "held": "fsspec",
+  "fix_version": "2026.6.0",
+  "blocker": "nemo-toolkit-asr",
+  "newest": "2.8.0rc2",
+  "caps": [
+   "fsspec==2024.12.0"
+  ],
+  "confirmed": true
+ },
+ {
+  "repo": "chidiwilliams/buzz",
+  "held": "hydra-core",
+  "fix_version": "1.3.6",
+  "blocker": "nemo-toolkit-asr",
+  "newest": "2.8.0rc2",
+  "caps": [
+   "hydra-core<=1.3.2,>1.3"
+  ],
+  "confirmed": true
+ },
+ {
+  "repo": "chidiwilliams/buzz",
+  "held": "lightning",
+  "fix_version": "2.6.6",
+  "blocker": "nemo-toolkit-asr",
+  "newest": "2.8.0rc2",
+  "caps": [
+   "lightning<=2.4.0,>2.2.1"
+  ],
+  "confirmed": true
+ },
+ {
+  "repo": "debpalash/VoiceStudio",
+  "held": "stanza",
+  "fix_version": "1.12.2",
+  "blocker": "argostranslate",
+  "newest": "1.11.0",
+  "caps": [
+   "stanza==1.10.1"
+  ],
+  "confirmed": true
+ },
+ {
+  "repo": "experientiallabs/experiential",
+  "held": "tornado",
+  "fix_version": "6.6.1",
+  "blocker": "exp-mitmproxy",
+  "newest": "12.2.3.post4",
+  "caps": [
+   "tornado<=6.5.10,>=6.5.10"
+  ],
+  "confirmed": true
+ },
+ {
+  "repo": "experientiallabs/experiential",
+  "held": "transformers",
+  "fix_version": "5.10.0",
+  "blocker": "tinker",
+  "newest": "0.40.1",
+  "caps": [],
+  "confirmed": false
+ },
+ {
+  "repo": "goauthentik/authentik",
+  "held": "autobahn",
+  "fix_version": "26.7.1",
+  "blocker": "daphne",
+  "newest": "4.2.3",
+  "caps": [],
+  "confirmed": false
+ },
+ {
+  "repo": "jumpserver/jumpserver",
+  "held": "autobahn",
+  "fix_version": "26.10.1",
+  "blocker": "daphne",
+  "newest": "4.2.3",
+  "caps": [],
+  "confirmed": false
+ },
+ {
+  "repo": "open-jarvis/OpenJarvis",
+  "held": "setuptools",
+  "fix_version": "84.1.0",
+  "blocker": "vllm",
+  "newest": "0.34.0",
+  "caps": [
+   "setuptools<81.0.0,>=78.1.1"
+  ],
+  "confirmed": true
+ },
+ {
+  "repo": "openai/openai-agents-python",
+  "held": "wcmatch",
+  "fix_version": "11.2",
+  "blocker": "e2b",
+  "newest": "2.66.0",
+  "caps": [],
+  "confirmed": false
+ },
+ {
+  "repo": "saleor/saleor",
+  "held": "opentelemetry-api",
+  "fix_version": "1.45.2",
+  "blocker": "opentelemetry-semantic-conventions",
+  "newest": "0.66b2",
+  "caps": [],
+  "confirmed": false
+ },
+ {
+  "repo": "sansan0/TrendRadar",
+  "held": "mcp",
+  "fix_version": "1.30.0",
+  "blocker": "fastmcp",
+  "newest": "4.2.6",
+  "caps": [],
+  "confirmed": false
+ },
+ {
+  "repo": "verl-project/verl",
+  "held": "setuptools",
+  "fix_version": "84.1.0",
+  "blocker": "vllm",
+  "newest": "0.34.0",
+  "caps": [
+   "setuptools<81.0.0,>=78.1.1"
+  ],
+  "confirmed": true
+ },
+ {
+  "repo": "verl-project/verl",
+  "held": "wcmatch",
+  "fix_version": "11.2",
+  "blocker": "multi-storage-client",
+  "newest": "1.6.0",
+  "caps": [
+   "wcmatch<11,>=10"
+  ],
+  "confirmed": true
+ },
+ {
+  "repo": "verl-project/verl",
+  "held": "wcmatch",
+  "fix_version": "11.2",
+  "blocker": "megatron-energon",
+  "newest": "8.0.0",
+  "caps": [],
+  "confirmed": false
+ },
+ {
+  "repo": "wagtail/wagtail",
+  "held": "mcp",
+  "fix_version": "1.30.0",
+  "blocker": "semgrep",
+  "newest": "1.187.0",
+  "caps": [
+   "mcp==1.29.0"
+  ],
+  "confirmed": true
+ },
+ {
+  "repo": "wagtail/wagtail",
+  "held": "opentelemetry-api",
+  "fix_version": "1.45.2",
+  "blocker": "semgrep",
+  "newest": "1.187.0",
+  "caps": [
+   "opentelemetry-api~=1.37.0"
+  ],
+  "confirmed": true
+ },
+ {
+  "repo": "wagtail/wagtail",
+  "held": "wcmatch",
+  "fix_version": "11.2",
+  "blocker": "semgrep",
+  "newest": "1.187.0",
+  "caps": [
+   "wcmatch~=8.3"
+  ],
+  "confirmed": true
+ },
+ {
+  "repo": "zylon-ai/private-gpt",
+  "held": "pillow",
+  "fix_version": "13.0.0",
+  "blocker": "pandasai",
+  "newest": "3.0.0",
+  "caps": [
+   "pillow<11.0.0,>=10.1.0"
+  ],
+  "confirmed": true
+ },
+ {
+  "repo": "zylon-ai/private-gpt",
+  "held": "pillow",
+  "fix_version": "13.0.0",
+  "blocker": "llama-index-core",
+  "newest": "0.14.26",
+  "caps": [],
+  "confirmed": false
+ }
+]

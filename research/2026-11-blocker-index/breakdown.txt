@@ -1,11 +1,11 @@
 total action/review advisories: 8007
   4623  57.7%  repos= 70  fixed in the verified plan
+  1107  13.8%  repos= 45  left out: other
    991  12.4%  repos= 26  needs a newer Python (requires-python)
-   918  11.5%  repos= 42  left out: other
    768   9.6%  repos=  0  no plan (none)
-   275   3.4%  repos= 15  held back by another package (no release allows it)
    237   3.0%  repos=  4  not planned (filtered from plan)
    137   1.7%  repos=  6  only an older release of a direct dependency allows it
+    86   1.1%  repos=  8  held back by another package (no release allows it)
     58   0.7%  repos= 28  no fixed version reported
 
 errors: 5
@@ -21,13 +21,13 @@ other reasons (top):
     60  still does not resolve with requires-python raised to >=N: Because gra
     59  needs Python >=N, and with requires-python raised to >=N it still does
     54  does not resolve together with the rest: Because your project depends 
+    54  blocked by crawlNai, camel-ai, and no version of them allows the fix: 
+    53  blocked by crawlNai, and no version of it allows the fix: The resoluti
     45  does not resolve together with the rest: While the active Python versi
     42  does not resolve together with the rest: Because browser-harness==N de
     42  does not resolve together with the rest: The `requires-python` value (
     39  already locked at N for the Pythons that can install it; the N copy is
+    38  blocked by optimum, and no version of it allows the fix: Because optim
     34  could not be checked: uv could not build deep-ep from sourceN Its last
+    19  blocked by pre-commit, and no version of it allows the fix: The resolu
     16  Because litellm==N depends on openai>=N,<N and openai-agents[litellm] 
-    14  could not be checked: uv could not build mamba-ssm from sourceN Its la
-    13  could not be checked: uv could not build sNtokenizer==N from sourceN I
-    12  does not resolve together with the rest: Because social-auth-core==N d
-     8  does not resolve together with the rest: Because torchaudio==N+cpu dep

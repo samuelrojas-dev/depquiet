@@ -4,6 +4,17 @@ We went looking for the packages that block security fixes across popular uv pro
 "Blocker Index". The biggest blocker turned out not to be a package at all. It was each
 project's own `requires-python`.
 
+> **Correction (2026-11-27, same day as publication).** The first version of this study
+> counted 275 advisories as held back by a package that no release of lets the fix in. Many of
+> those claims were wrong: depquiet said so whenever uv could not lock the fix with that package
+> loosened, but in camel, for example, it blamed crawl4ai for pillow 13.0.0 while crawl4ai 0.9.6
+> requires only `pillow>=10.4` (camel's own `psutil<6` and its `agentops<0.4` were the cause).
+> Every claim is now checked against the blocker's newest release on PyPI
+> ([`verify_blockers.py`](verify_blockers.py)): 15 of 37 hold. The headline holds and gets
+> stronger: packages hold back 223 advisories, not 412, so the Python floor holds back 4.4
+> times more, not 2.4. 13 packages hold back a fix, not 29, and crawl4ai is not one of them.
+> depquiet itself is fixed the same way from 0.60.4 ([#182](https://github.com/samuelrojas-dev/depquiet/pull/182)).
+
 ## Results
 
 Sample: the 120 most-starred GitHub repositories with a `uv.lock` (from the 2026-11-20 top-1000
@@ -16,35 +27,32 @@ in all (each advisory counted once per package per repository; deprioritized ale
 |---|---:|---:|---:|
 | Fixed by the verified plan | 4,623 | 57.7% | 70 |
 | Needs a newer Python than `requires-python` allows | 991 | 12.4% | 26 |
-| Held back by another package that no release of lets the fix in | 275 | 3.4% | 15 |
+| Held back by another package whose newest release still caps the fix | 86 | 1.1% | 8 |
 | Only an older release of a direct dependency allows it | 137 | 1.7% | 6 |
-| Left out for other reasons (fixes that conflict, resolutions that fail on one platform, builds that need a GPU toolchain) | 918 | 11.5% | 42 |
+| Left out for other reasons (fixes that conflict, resolutions that fail on one platform, builds that need a GPU toolchain, a package that holds the fix back although its newest release allows it) | 1,107 | 13.8% | 45 |
 | uv cannot lock the project as it is, so no plan | 768 | 9.6% | 3 |
 | JavaScript side of a mixed repository (pnpm), not planned | 237 | 3.0% | 4 |
 | No fixed version reported | 58 | 0.7% | 28 |
 
-**The Python floor holds back 2.4 times more advisories (991) than every other package combined
-(412).** It is also the easiest one to see past: depquiet verifies whether raising
+**The Python floor holds back 4.4 times more advisories (991) than every other package combined
+(223).** It is also the easiest one to see past: depquiet verifies whether raising
 `requires-python`, or for a library `[tool.uv] environments`, lets each fix in.
 
 ### The packages that hold fixes back
 
-29 packages hold back at least one fix. Most of them do it in a single project. The ones that do
-it in more than one:
+13 packages hold back at least one fix. Only 2 of them do it in more than one project:
 
 | Holds back | Repos | Fixes held | Advisories | Kind |
 |---|---:|---|---:|---|
-| crawl4ai | 2 | pillow, lxml | 107 | no release allows it |
 | tensordict | 2 | virtualenv | 32 | only an older release allows it |
-| vllm | 2 | setuptools | 4 | no release allows it |
-| daphne | 2 | autobahn | 2 | no release allows it |
+| vllm | 2 | setuptools | 4 | its newest release caps it (`setuptools<81`) |
 
 The full list is in [`blocker_index.csv`](blocker_index.csv), and every held fix with uv's own
 explanation in [`blocked_fixes.csv`](blocked_fixes.csv).
 
-The packages whose fixes are held back most often, by different blockers in different projects:
-**pillow** (4 repositories: airflow, camel, owl, private-gpt), then **setuptools**,
-**opentelemetry-api**, **wcmatch** and **virtualenv** (3 each).
+The fix held back most often is **setuptools**'s (3 repositories: jumpserver, OpenJarvis, verl),
+then **pillow**, **virtualenv** and **wcmatch** (2 each), by different blockers in different
+projects.
 
 ### What this means
 
@@ -66,7 +74,10 @@ The packages whose fixes are held back most often, by different blockers in diff
 2. [`breakdown.py`](breakdown.py) puts every advisory that needs action in one outcome, by its
    package's place in the plan, in this order: fixed, needs a newer Python, only an older direct
    dependency allows it, held back by another package, no fixed version, other.
-3. [`aggregate.py`](aggregate.py) counts the blockers. A fix that a higher `requires-python`
+3. [`verify_blockers.py`](verify_blockers.py) checks every "no release of it allows the fix"
+   against the blocker's newest release on PyPI (answers saved in `newest_releases.json`). Only
+   an upper bound below the fixed version counts; anything else goes to "other".
+4. [`aggregate.py`](aggregate.py) counts the blockers. A fix that a higher `requires-python`
    lets in is not credited to a package, even when a first attempt named one.
 
 Versions: 91 repositories ran on depquiet `main` at the 0.60.1 changes; the 29 below ran on
@@ -87,8 +98,9 @@ After the rerun, no advisory is left as "could not be checked" over a fetch erro
 - One snapshot of one branch per project. Locks change every day.
 - Alerts are depquiet's scan of the lockfile (pip-audit, OSV.dev), not GitHub's Security tab.
   Counts can differ a little.
-- "No release allows it" means uv found no release of the blocker that lets the fix in, at the
-  time of the run.
+- "Its newest release still caps the fix" means the blocker's newest release on PyPI, on
+  2026-11-27, requires the fixed package below the fixed version. A package that needs a newer
+  Python, or one held back itself by another constraint, is not counted as a blocker.
 - The 3 projects uv could not lock: DB-GPT (`tool.uv.default-groups` names a group that does not
   exist: 604 advisories), deepwiki-open (no `pyproject.toml` next to the lock) and openpilot (a
   path dependency lives in a git submodule, which the shallow clone did not fetch: a limit of this
@@ -105,8 +117,9 @@ After the rerun, no advisory is left as "could not be checked" over a fetch erro
 | `rerun.txt` | The 29 re-run on GitHub Actions |
 | `results.tar.gz` | Every repository's result, trimmed to what the scripts read (130 KB) |
 | `breakdown.py`, `breakdown.txt` | Where each advisory ends up |
+| `verify_blockers.py`, `newest_releases.json`, `verified_blockers.json` | Every blocker claim checked against the newest release |
 | `aggregate.py`, `blocker_index.csv`, `blocked_fixes.csv`, `summary.json` | The blockers |
 | `vm_rerun.sh` | The same rerun as a script, for any Linux machine |
 
-To reproduce from the results: `tar xzf results.tar.gz && python3 breakdown.py slim && python3
-aggregate.py slim .`
+To reproduce from the results: `tar xzf results.tar.gz && python3 verify_blockers.py slim &&
+python3 breakdown.py slim && python3 aggregate.py slim .`

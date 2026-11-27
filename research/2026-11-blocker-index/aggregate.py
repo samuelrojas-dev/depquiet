@@ -31,8 +31,20 @@ def pep503(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
 
+def verified() -> set[tuple[str, str, str]]:
+    """(repo, held, blocker) whose blocker's newest release still caps the fix (verify_blockers.py).
+
+    depquiet up to 0.60.3 also blamed a package whose newest release allows the
+    fix (crawl4ai in camel): those claims are left out.
+    """
+    path = Path(__file__).parent / "verified_blockers.json"
+    rows = json.loads(path.read_text(encoding="utf-8"))
+    return {(r["repo"], pep503(r["held"]), r["blocker"]) for r in rows if r["confirmed"]}
+
+
 def main(out_dir: Path, dest: Path) -> None:
     repos = sorted(out_dir.glob("*.json"))
+    confirmed = verified()
     per_blocker: dict[str, dict] = defaultdict(
         lambda: {"repos": set(), "held": set(), "advisories": 0, "older": set(), "none": set()}
     )
@@ -70,8 +82,11 @@ def main(out_dir: Path, dest: Path) -> None:
             n = len(advisories.get(key, ()))
             # A fix that a higher requires-python lets in was held back by the Python
             # floor, not by the package a first attempt named (depquiet <0.60.2 kept it).
-            blockers = [] if key in needs_python else item.get("blocked_by") or []
             older = item.get("needs_older") or []
+            blockers = [] if key in needs_python else [
+                b for b in item.get("blocked_by") or []
+                if (repo, key, b) in confirmed or any(o.startswith(f"{b} ") for o in older)
+            ]
             if blockers:
                 stats["held_advisories"] += n
             for blocker in blockers:
