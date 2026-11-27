@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- A fix is reported as held back by another package, with no release of it allowing the fix,
+  only when that package's newest release on PyPI still leaves the fix out. uv failing with the
+  blocker loosened only says that no version of it fits with the rest of the project: in camel,
+  depquiet said no version of crawl4ai allowed pillow 13.0.0, yet crawl4ai 0.9.6 requires only
+  pillow>=10.4, and camel's own `psutil<6` and its `agentops<0.4` were what kept uv on crawl4ai
+  0.6.3. Such a fix now says the newest release allows it and gives uv's explanation; when PyPI
+  cannot be asked, nothing is claimed. A confirmed blocker names the requirement that caps the
+  fix (`semgrep 1.187.0 requires mcp==1.29.0`).
+
 ## [0.60.3] - 2026-11-27
 
 ### Fixed

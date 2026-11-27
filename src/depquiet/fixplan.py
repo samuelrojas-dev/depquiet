@@ -918,6 +918,13 @@ def _loosen(requirement: str, floor: str) -> str | None:
     return f"{name}{','.join(kept)}{match.group('marker') or ''}"
 
 
+@dataclass
+class _NoBlockerVersion:
+    """uv found no version of the blockers that lets the fix in, with the project as it is."""
+
+    explain: str
+
+
 def _plan_chain(
     project: Path,
     executable: str,
@@ -925,8 +932,8 @@ def _plan_chain(
     blockers: list[str],
     installed: dict[str, str],
     timeout: int,
-) -> str | None:
-    """Fill ``item`` so that its blockers move too; a reason string if that fails.
+) -> str | _NoBlockerVersion | None:
+    """Fill ``item`` so that its blockers move too; why not if that fails.
 
     On a copy of the project, the blockers' requirements are loosened to let
     the resolver pick versions that allow the fix. The versions it picks are
@@ -953,11 +960,7 @@ def _plan_chain(
             return answer
         code, stdout, stderr = answer
         if code != 0:
-            return (
-                f"blocked by {', '.join(blockers)}, and no version of "
-                f"{'it' if len(blockers) == 1 else 'them'} allows the fix: "
-                f"{_explain(stderr or stdout)}"
-            )
+            return _NoBlockerVersion(_explain(stderr or stdout))
         picked = {
             _pep503(u.split(" ")[0]): u.split(" -> v")[-1] for u in _updates(f"{stdout}\n{stderr}")
         }
@@ -1411,10 +1414,10 @@ def build_fix_plan(
             # Another package holds it back, and the project pins that package:
             # find the blocker version that allows the fix, and pin that.
             chained = _plan_chain(project, executable, item, check.also_upgrade, installed, timeout)
-            if isinstance(chained, str):
+            if isinstance(chained, _NoBlockerVersion):
+                _explain_blockers(item, list(check.also_upgrade), chained.explain)
+            elif isinstance(chained, str):
                 item.why = chained
-                if chained.startswith("blocked by") and "no version of" in chained:
-                    item.blocked_by = list(check.also_upgrade)
         elif check.reason == "python" and check.python_floor:
             floors[package] = check.python_floor
             item.why = check.next_step
@@ -1556,6 +1559,114 @@ def _release_pythons(packages: list[tuple[str, str]]) -> dict[str, str]:
         return {}
     with ThreadPoolExecutor(max_workers=8) as pool:
         return dict(pool.map(one, packages))
+
+
+def _newest_requirements(
+    blockers: list[str], package: str
+) -> dict[str, tuple[str, list[str]] | None]:
+    """Blocker -> its newest release on PyPI and what that release requires of ``package``.
+
+    None for a blocker PyPI could not answer for (offline, a private index).
+    """
+    import urllib.request
+    from concurrent.futures import ThreadPoolExecutor
+
+    key = _pep503(package)
+
+    def one(blocker: str) -> tuple[str, tuple[str, list[str]] | None]:
+        url = f"https://pypi.org/pypi/{_pep503(blocker)}/json"
+        try:
+            with urllib.request.urlopen(url, timeout=15) as response:
+                info = json.load(response).get("info") or {}
+        except (OSError, ValueError):
+            return blocker, None
+        newest = info.get("version")
+        if not isinstance(newest, str) or not newest:
+            return blocker, None
+        wanted = []
+        for req in info.get("requires_dist") or []:
+            match = _REQUIREMENT.match(_unparen(req)) if isinstance(req, str) else None
+            if match and _pep503(match.group("name")) == key:
+                wanted.append(req.split(";", 1)[0].strip())
+        return blocker, (newest, wanted)
+
+    if not blockers:
+        return {}
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        return dict(pool.map(one, blockers))
+
+
+def _unparen(requirement: str) -> str:
+    """``pillow (>=9.0)`` as ``pillow >=9.0``: older metadata wraps the clauses."""
+    head, sep, marker = requirement.partition(";")
+    return head.replace("(", " ").replace(")", " ") + sep + marker
+
+
+def _caps(requirement: str, version: str) -> bool:
+    """Whether a requirement keeps its package below the fixed ``version`` (markers ignored).
+
+    Only an upper bound does: a floor above the fix (langgraph 1.2.24 requires
+    langgraph-sdk>=0.4.6, past the 0.4.4 fix) still lets a fixed release in.
+    """
+    match = _REQUIREMENT.match(_unparen(requirement))
+    if not match:
+        return False
+    for clause in (c.strip() for c in match.group("spec").split(",")):
+        parsed = _CLAUSE.match(clause) if clause else None
+        if parsed is None or parsed.group(1) in (">", ">=", "!="):
+            continue
+        op, bound = parsed.group(1), parsed.group(2)
+        if not _satisfies(version, op, bound) and version_key(version) >= version_key(
+            bound.removesuffix(".*")
+        ):
+            return True
+    return False
+
+
+def _explain_blockers(item: PlanItem, blockers: list[str], explain: str) -> None:
+    """Say what holds ``item`` back; claim no release allows it only where that is checked.
+
+    uv failing with the blockers loosened only says that no version of them
+    fits with the rest of the project. camel (2026-11-27): uv named crawl4ai for
+    pillow 13.0.0, and depquiet said no version of crawl4ai allowed it, yet
+    crawl4ai 0.9.6 requires only pillow>=10.4: camel's own psutil<6 and its
+    agentops<0.4 kept uv on crawl4ai 0.6.3. So the newest release's own
+    requirements decide: a blocker is one nothing in the project can get past
+    only when its newest release leaves the fix out.
+    """
+    newest = _newest_requirements(blockers, item.package)
+    capped: dict[str, str] = {}  # blocker -> "semgrep 1.187.0 requires wcmatch~=8.3"
+    allowing: list[str] = []  # "crawl4ai 0.9.6"
+    for blocker in blockers:
+        found = newest.get(blocker)
+        if found is None:
+            continue
+        release, requirements = found
+        caps = list(dict.fromkeys(r for r in requirements if _caps(r, item.version)))
+        if caps:
+            capped[blocker] = f"{blocker} {release} requires {', '.join(caps)}"
+        else:
+            allowing.append(f"{blocker} {release}")
+    if capped:
+        item.blocked_by = list(capped)
+        them = "it" if len(capped) == 1 else "them"
+        item.why = (
+            f"blocked by {', '.join(capped)}, and no release of {them} allows the fix: "
+            f"the newest, {'; '.join(capped.values())}. uv: {explain}"
+        )
+    elif len(allowing) < len(blockers):
+        them = "it" if len(blockers) == 1 else "them"
+        item.why = (
+            f"blocked by {', '.join(blockers)}: uv found no version of {them} that fits with the "
+            f"rest of the project, and PyPI could not say whether the newest release allows "
+            f"{item.package} {item.version}. uv: {explain}"
+        )
+    else:
+        item.why = (
+            f"held back through {', '.join(blockers)}, though the newest release allows the fix "
+            f"({', '.join(allowing)}): something else in the project keeps uv from moving to it. "
+            f"uv: {explain}"
+        )
 
 
 def _note_newer_pythons(plan: FixPlan, project: Path) -> None:
