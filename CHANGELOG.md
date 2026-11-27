@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- A fix that a higher `requires-python` lets in no longer keeps the package a first attempt
+  named as its blocker (`blocked_by`), so the dashboard does not say another package holds it
+  back. Real case: crewAI, where filelock was reported as blocked by litellm and wcmatch by e2b,
+  while raising `requires-python` to 3.11 lets both in.
+
 ## [0.60.1] - 2026-11-27
 
 ### Changed

@@ -1456,6 +1456,10 @@ def build_fix_plan(
         )
         unblocked = [i for i in [*waiting, *retry] if i.package in option.unblocked]
         for item in unblocked:
+            # The Python floor is what held it back, not the package a first attempt
+            # named (crewAI, 2026-11-27: "blocked by litellm" for filelock, which a
+            # higher requires-python lets in).
+            item.blocked_by, item.needs_older = [], []
             if raise_python_floor:
                 item.included = True
                 item.python_floor = option.floor
