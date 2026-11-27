@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.60.3] - 2026-11-27
+
 ### Fixed
 - OSV.dev fallback: an advisory whose only severity is a vector depquiet cannot score (CVSS v4)
   is kept with an unknown severity instead of ending the whole scan. Found by the Blocker Index
@@ -1694,7 +1696,8 @@ requirements.txt and npm projects:
 - CI workflow with lint, typecheck, test matrix (3.11/3.12/3.13), and build
 - Automated release workflow with trusted PyPI publishing
 
-[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.60.2...HEAD
+[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.60.3...HEAD
+[0.60.3]: https://github.com/samuelrojas-dev/depquiet/compare/v0.60.2...v0.60.3
 [0.60.2]: https://github.com/samuelrojas-dev/depquiet/compare/v0.60.1...v0.60.2
 [0.60.1]: https://github.com/samuelrojas-dev/depquiet/compare/v0.60.0...v0.60.1
 [0.60.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.59.2...v0.60.0
