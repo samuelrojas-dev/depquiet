@@ -455,7 +455,6 @@ def _osv_severity(vuln_data: dict[str, Any]) -> Severity | None:
 
     # CVSS from severity[] array: the API normally supplies vectors, not numbers.
     scores: list[float] = []
-    unsupported = False
     for sev_entry in vuln_data.get("severity", []):
         score_str = sev_entry.get("score", "")
         if score_str:
@@ -466,8 +465,6 @@ def _osv_severity(vuln_data: dict[str, Any]) -> Severity | None:
                 score = _cvss3_base_score(str(score_str))
             if score is not None and 0 <= score <= 10:
                 scores.append(score)
-            else:
-                unsupported = True
     if scores:
         score = max(scores)
         if score >= 9.0:
@@ -477,9 +474,10 @@ def _osv_severity(vuln_data: dict[str, Any]) -> Severity | None:
         if score >= 4.0:
             return Severity.MODERATE
         return Severity.LOW if score > 0 else Severity.INFO
-    if unsupported:
-        raise ScanError(f"cannot determine OSV.dev severity for {vuln_data.get('id', 'advisory')}.")
-
+    # A vector depquiet cannot score (CVSS v4, say) makes the severity unknown, not
+    # moderate: the alert is kept with severity_known=False and reported as
+    # "unknown". It used to end the whole scan, which hid every other alert
+    # (textual's poetry.lock, PYSEC-2026-4320, Blocker Index study 2026-11-27).
     return None
 
 
