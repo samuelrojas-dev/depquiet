@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - When the plan is empty and a higher `requires-python` would help, the terminal no longer says
   "--raise-python-floor" twice: the Python floor section already says it.
 
+### Changed
+- The `[tool.uv] environments` suggestion adds that the `fix-pr` Action can do the relock
+  Dependabot will not. Real run on depquiet-floor-test: 64 open Dependabot alerts, one pull
+  request from the Action changing only `uv.lock`, all 64 marked fixed after the merge.
+
 ## [0.59.0] - 2026-11-25
 
 ### Added

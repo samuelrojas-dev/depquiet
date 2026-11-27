@@ -452,6 +452,7 @@ def test_the_floor_offers_lock_environments_for_a_library(tmp_path, monkeypatch)
     lines = fp.python_floor_lines(option)
     assert any("[tool.uv] environments" in line for line in lines)
     assert any("Dependabot does not read environments" in line for line in lines)
+    assert any("fix-pr Action can do that relock" in line for line in lines)
     assert "environments" not in (project / "pyproject.toml").read_text(encoding="utf-8")
 
 

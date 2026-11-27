@@ -2182,7 +2182,8 @@ def python_floor_lines(option: PythonFloor | None, tool: str = "uv") -> list[str
             "  Dependabot does not read environments: it still picks its Python from "
             "requires-python, so it will not open these updates itself, and each later fix "
             "that needs a newer Python means another manual uv lock. Raising requires-python "
-            "is the only change Dependabot follows."
+            "is the only change Dependabot follows. depquiet's fix-pr Action can do that relock "
+            "on a schedule and open the pull request."
         )
     if option.dev_only:
         lines.append(

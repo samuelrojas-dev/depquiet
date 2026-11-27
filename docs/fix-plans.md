@@ -196,6 +196,18 @@ plan says so. For an application, or when the older Python is already end-of-lif
 `requires-python` is the simpler choice: that project raised it to `>=3.11` instead, since
 Python 3.10 reached end-of-life on 1 October 2026 and its CI already tested only 3.11–3.14.
 
+The relock Dependabot will not do, the `fix-pr` Action does. Run it on a schedule (the
+[workflow below](#one-pull-request-with-every-fix-that-installs-fix-pr)) and each new fix that needs the newer
+Python arrives as a pull request. Real run on
+[depquiet-floor-test](https://github.com/samuelrojas-dev/depquiet-floor-test):
+`requires-python = ">=3.10"`, `environments = ["python_full_version >= '3.11.5'"]`, pillow
+12.2.0 and soupsieve 2.8.3 locked, 64 open Dependabot alerts. Dependabot's own pull request
+only went to pillow 12.3.0, still vulnerable. The Action verified pillow 13.0.0 and soupsieve
+4.0.0 with uv and opened a pull request that changed only `uv.lock`; after the merge, GitHub
+marked all 64 alerts fixed. The repository needs Settings > Actions > General > "Allow GitHub
+Actions to create and approve pull requests", and with the default `GITHUB_TOKEN` your CI does
+not run on that pull request: pass `fix-pr-token` for that.
+
 Poetry projects get the same option. `poetry update` on a transitive package resolves and
 quietly keeps the old version, so depquiet requires the fix directly on a copy, reads the
 Python each release needs from Poetry's error (`soupsieve (4.1.1) requires Python
