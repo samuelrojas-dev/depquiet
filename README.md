@@ -34,6 +34,11 @@ Five projects have merged pull requests that came from depquiet plans, wagtail a
 and one of those merges broke something downstream: [the table](#merged-upstream) says what
 happened in each.
 
+What holds fixes back in practice: in the 120 most-starred GitHub projects that use uv, the
+project's own `requires-python` holds back 991 security advisories, 2.4 times more than every
+other package combined. [The study](research/2026-11-blocker-index) has the method, the data
+and the scripts to reproduce it.
+
 ## Before and after
 
 A project pins `requests==2.31.0` and `botocore==1.29.0`, and botocore holds urllib3 back.
