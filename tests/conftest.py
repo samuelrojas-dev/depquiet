@@ -28,9 +28,11 @@ def _no_pip_audit_lookups(request, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _no_pypi_python_lookups(request, monkeypatch):
-    """Fix plans in tests must not ask PyPI which Python a release needs.
+    """Fix plans in tests must not ask PyPI about releases.
 
-    Tests of that note opt in with ``@pytest.mark.python_lookups`` and fake it.
+    Neither which Python a release needs nor what a blocker's newest release
+    requires. Tests of those opt in with ``@pytest.mark.python_lookups`` and fake it.
     """
     if request.node.get_closest_marker("python_lookups") is None:
         monkeypatch.setattr("depquiet.fixplan._release_pythons", lambda *a, **k: {})
+        monkeypatch.setattr("depquiet.fixplan._newest_requirements", lambda *a, **k: {})

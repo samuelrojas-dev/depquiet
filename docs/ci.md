@@ -77,10 +77,11 @@ gives every vulnerable package a state and what to do about it, updated on every
 
 - **Fixed in the fix pull request**, with its link (when `fix-pr` is on), and a warning when
   the fixes only fit by moving other packages back.
-- **Held back by another package**, grouped by that package, when no release of it lets the
-  fix in: only a change there unblocks it, nothing in your project can.
+- **Held back by another package**, grouped by that package, when its newest release on PyPI
+  still leaves the fix out: only a change there unblocks it, nothing in your project can.
 - **Needs a change in your project**, with the verified option (`requires-python`, or
-  `[tool.uv] environments` for a library).
+  `[tool.uv] environments` for a library). This includes a fix held back through a package whose
+  newest release does allow it: something else in the project keeps uv from moving to it.
 - **No fixed version reported**, and **deprioritized** (development-only, test-only, ...),
   which depquiet never dismisses.
 
