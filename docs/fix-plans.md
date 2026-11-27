@@ -178,6 +178,24 @@ line to add (`python_floor.lock_environment` in the JSON). A project that alread
 `environments` is left alone. It is not added to the diff: whether the lock may stop covering
 Python 3.11.0–3.11.4 is the maintainer's call.
 
+This fixes the lock, not Dependabot. Dependabot ignores `environments`: it picks its Python
+from `requires-python` and filters out every release that needs a newer one. A contributor to
+stac-auth-proxy tested it with the Dependabot CLI on a project locked to pillow 12.3.0 with
+`requires-python = ">=3.10"`
+([details](https://github.com/developmentseed/stac-auth-proxy/issues/250)):
+
+| pyproject | Dependabot security update |
+|---|---|
+| `">=3.10"` | not possible |
+| `">=3.10"` + `environments` | not possible |
+| `">=3.10"` + `environments`, after a manual `uv lock` | not needed (the lock already has 13.0.0) |
+| `">=3.11"` | opens the PR to pillow 13.0.0 |
+
+So with `environments` each later fix of this kind needs another manual `uv lock`, and the
+plan says so. For an application, or when the older Python is already end-of-life, raising
+`requires-python` is the simpler choice: that project raised it to `>=3.11` instead, since
+Python 3.10 reached end-of-life on 1 October 2026 and its CI already tested only 3.11–3.14.
+
 Poetry projects get the same option. `poetry update` on a transitive package resolves and
 quietly keeps the old version, so depquiet requires the fix directly on a copy, reads the
 Python each release needs from Poetry's error (`soupsieve (4.1.1) requires Python
