@@ -160,3 +160,20 @@ def test_report_comes_before_the_plan_when_saved_to_one_file(tmp_path, monkeypat
     out = shared.getvalue()
     assert "No vulnerabilities found" in out and "Fix plan" in out
     assert out.index("No vulnerabilities found") < out.index("Fix plan")
+
+
+def test_a_fix_the_floor_lets_in_is_not_credited_to_a_blocker(tmp_path, uv) -> None:
+    """crewAI (2026-11-27): "blocked by litellm" for filelock stayed after the floor let it in."""
+    checks = _checks()
+    checks["urllib3"] = FixCheck(
+        "blocked",
+        "urllib3",
+        "2.8.0",
+        reason="dependency",
+        also_upgrade=["requests"],
+        next_step=f"blocked by requests: {REQUIRES_PYTHON_HINT}",
+    )
+    plan = build_fix_plan(_result(), _project(tmp_path), checks)
+    urllib3 = next(i for i in plan.items if i.package == "urllib3")
+    assert "raising requires-python to >=3.11 lets it install" in urllib3.why
+    assert urllib3.blocked_by == [] and urllib3.needs_older == []
