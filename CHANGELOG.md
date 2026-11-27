@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Dashboard issue (`--dashboard FILE`, Action input `dashboard: "true"`): one issue,
+  "depquiet: dependency alerts", that gives every vulnerable package a state and what to do
+  about it: fixed in the fix pull request (with its link), held back by another package that
+  no release of lets the fix in (grouped by that package: on wagtail, semgrep held back mcp,
+  opentelemetry-api and wcmatch, 8 advisories, that nothing in wagtail can fix), needs a change
+  in the project (with the verified `requires-python` or `[tool.uv] environments` option), no
+  fixed version reported, or deprioritized, which it never dismisses. Updated on every run.
+  Built from depquiet's own scan: a workflow's `GITHUB_TOKEN` gets 403 on the Dependabot alerts
+  API, with or without `security-events`.
+- Fix plans record the packages that hold a fix back when no release of them allows it
+  (`blocked_by` in the JSON).
+- npm: `fixAvailable: true` (npm audit fix fixes it within the declared ranges) is kept as
+  `fix_in_range`, so it is not reported as "no fix". A fix through a parent that would move the
+  parent back (npm audit offered wagtail draftail 1.1.0 with 2.0.1 installed) is shown as that,
+  not offered.
 - uv plans say which fixes Dependabot cannot open, and why: the release needs a newer Python
   than the oldest one `requires-python` allows, which is the Python Dependabot resolves for
   (it ignores `[tool.uv] environments`). The fix pull request gets a "Why Dependabot did not

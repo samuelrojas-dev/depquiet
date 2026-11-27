@@ -123,6 +123,10 @@ inputs:
     description: "Branch for the fix pull request. It is force-pushed on every run: do not commit to it by hand."
     required: false
     default: "depquiet/security-fixes"
+  dashboard:
+    description: "Keep one issue, \"depquiet: dependency alerts\", that gives every vulnerable package a state and what to do: fixed in the fix pull request, held back by another package (and which), needs a change in your project (with the verified option), no fixed version reported, or deprioritized (never dismissed) (true/false). Updated on every run; skipped on pull_request events. Needs issues: write. Built from depquiet's own scan: a workflow token cannot read Dependabot's alerts."
+    required: false
+    default: "false"
   fix-pr-token:
     description: "Token that pushes the branch and opens the pull request. With the default GITHUB_TOKEN, GitHub does not start your CI workflows on that pull request: pass a personal access token or GitHub App token to have them run."
     required: false
@@ -153,6 +157,9 @@ outputs:
   diff-fixed:
     description: "Number of fixed findings in diff (when diff-base is set)"
     value: ${{ steps.diff.outputs.fixed }}
+  dashboard-url:
+    description: "URL of the dashboard issue (when dashboard updated or opened one)"
+    value: ${{ steps.dashboard.outputs.url }}
   fix-pr-url:
     description: "URL of the fix pull request (when fix-pr opened or updated one)"
     value: ${{ steps.fixpr.outputs.url }}
@@ -222,6 +229,7 @@ runs:
         INPUT_FIX_PR: ${{ inputs.fix-pr }}
         INPUT_FIX_PR_RAISE_PYTHON_FLOOR: ${{ inputs.fix-pr-raise-python-floor }}
         INPUT_FIX_PR_INCLUDE_FILTERED: ${{ inputs.fix-pr-include-filtered }}
+        INPUT_DASHBOARD: ${{ inputs.dashboard }}
       run: |
         SCAN_DIR=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/depquiet.XXXXXX")
         SCAN_FILE="$SCAN_DIR/scan.json"
@@ -322,6 +330,21 @@ runs:
                 ARGS+=(--fix-filtered)
               fi
               echo "fix_report=$SCAN_DIR/fix-pr.md" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+        fi
+
+        # The dashboard issue: written here, posted in a later step, which fills
+        # in the fix pull request's link once that step has opened it.
+        if [ "$INPUT_DASHBOARD" = "true" ]; then
+          case "${GITHUB_EVENT_NAME:-}" in
+            pull_request|pull_request_target)
+              echo "::notice::depquiet: the dashboard is skipped on pull request events."
+              ;;
+            *)
+              ARGS+=(--dashboard "$SCAN_DIR/dashboard.md")
+              export DEPQUIET_DASHBOARD_PR_PLACEHOLDER=1
+              echo "dashboard=$SCAN_DIR/dashboard.md" >> "$GITHUB_OUTPUT"
               ;;
           esac
         fi
@@ -558,6 +581,43 @@ runs:
         fi
         echo "url=$URL" >> "$GITHUB_OUTPUT"
         echo "depquiet: fix pull request: $URL"
+
+    - name: Update the dashboard issue
+      id: dashboard
+      if: always() && inputs.dashboard == 'true' && steps.run.outputs.dashboard != ''
+      shell: bash
+      env:
+        DASHBOARD: ${{ steps.run.outputs.dashboard }}
+        FIX_PR_URL: ${{ steps.fixpr.outputs.url }}
+        FIX_PR: ${{ inputs.fix-pr }}
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        if [ ! -s "$DASHBOARD" ]; then
+          echo "::warning::depquiet: the scan did not finish, so the dashboard was not updated."
+          exit 0
+        fi
+        if [ -n "$FIX_PR_URL" ]; then
+          LINE="Pull request: $FIX_PR_URL"
+        elif [ "$FIX_PR" = "true" ]; then
+          LINE="The fix pull request was not opened on this run: see the job log."
+        else
+          LINE="Set \`fix-pr: \"true\"\` to have depquiet open this pull request."
+        fi
+        BODY="$(mktemp)"
+        PLACEHOLDER='{{DEPQUIET_FIX_PR_URL}}'
+        LINE="$LINE" PLACEHOLDER="$PLACEHOLDER" python3 -c 'import os, sys; t = open(sys.argv[1], encoding="utf-8").read(); open(sys.argv[2], "w", encoding="utf-8").write(t.replace(os.environ["PLACEHOLDER"], os.environ["LINE"]))' "$DASHBOARD" "$BODY"
+        TITLE="depquiet: dependency alerts"
+        NUMBER=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$TITLE\" in:title" --json number,title --jq "map(select(.title == \"$TITLE\")) | .[0].number // empty")
+        if [ -n "$NUMBER" ]; then
+          gh issue edit "$NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$BODY" >/dev/null
+          URL=$(gh issue view "$NUMBER" --repo "$GITHUB_REPOSITORY" --json url --jq .url)
+        elif ! URL=$(gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body-file "$BODY"); then
+          echo "::error::depquiet: could not open the dashboard issue. Check that the job has 'issues: write' and that the repository has issues enabled."
+          exit 2
+        fi
+        echo "url=$URL" >> "$GITHUB_OUTPUT"
+        echo "depquiet: dashboard: $URL"
 
     - name: Upload SARIF to GitHub
       if: inputs.sarif != '' && always()
