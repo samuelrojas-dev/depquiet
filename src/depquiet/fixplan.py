@@ -2178,6 +2178,12 @@ def python_floor_lines(option: PythonFloor | None, tool: str = "uv") -> list[str
             "those Pythons, so your CI and development get the fixes and users still install on "
             "older ones, where the fixes do not apply. Verified with uv's resolver."
         )
+        lines.append(
+            "  Dependabot does not read environments: it still picks its Python from "
+            "requires-python, so it will not open these updates itself, and each later fix "
+            "that needs a newer Python means another manual uv lock. Raising requires-python "
+            "is the only change Dependabot follows."
+        )
     if option.dev_only:
         lines.append(
             f"  {', '.join(option.dev_only)} reach the project only through development "

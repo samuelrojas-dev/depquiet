@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- The `[tool.uv] environments` suggestion now says that Dependabot does not read it: Dependabot
+  still picks its Python from `requires-python`, so it will not open those updates itself and
+  each later fix of that kind needs a manual `uv lock`. A stac-auth-proxy contributor showed it
+  with the Dependabot CLI; docs/fix-plans.md has the table.
 - When the plan is empty and a higher `requires-python` would help, the terminal no longer says
   "--raise-python-floor" twice: the Python floor section already says it.
 

@@ -449,7 +449,9 @@ def test_the_floor_offers_lock_environments_for_a_library(tmp_path, monkeypatch)
     project = _project(tmp_path)
     option = build_fix_plan(_result(), project, _checks()).python_floor
     assert option is not None and option.lock_environment == "python_full_version >= '3.10'"
-    assert any("[tool.uv] environments" in line for line in fp.python_floor_lines(option))
+    lines = fp.python_floor_lines(option)
+    assert any("[tool.uv] environments" in line for line in lines)
+    assert any("Dependabot does not read environments" in line for line in lines)
     assert "environments" not in (project / "pyproject.toml").read_text(encoding="utf-8")
 
 
