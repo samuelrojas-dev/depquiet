@@ -35,7 +35,7 @@ and one of those merges broke something downstream: [the table](#merged-upstream
 happened in each.
 
 What holds fixes back in practice: in the 120 most-starred GitHub projects that use uv, the
-project's own `requires-python` holds back 991 security advisories, 2.4 times more than every
+project's own `requires-python` holds back 991 security advisories, 4.4 times more than every
 other package combined. [The study](research/2026-11-blocker-index) has the method, the data
 and the scripts to reproduce it.
 

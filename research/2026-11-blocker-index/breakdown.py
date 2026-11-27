@@ -5,6 +5,10 @@ from pathlib import Path
 
 def pep503(n): return re.sub(r"[-_.]+", "-", n).lower()
 
+# Only blockers whose newest release still caps the fix (verify_blockers.py).
+VERIFIED = json.loads((Path(__file__).parent / "verified_blockers.json").read_text())
+confirmed = {(v["repo"], pep503(v["held"]), v["blocker"]) for v in VERIFIED if v["confirmed"]}
+
 out = Path(sys.argv[1])
 cat_adv = Counter(); cat_repos = defaultdict(set); other = Counter(); errors = []
 timeouts = []
@@ -30,7 +34,7 @@ for p in sorted(out.glob("*.json")):
         if k in inc: c = "fixed in the verified plan"
         elif k in floor: c = "needs a newer Python (requires-python)"
         elif k in left and left[k].get("needs_older") and not k in floor: c = "only an older release of a direct dependency allows it"
-        elif k in left and left[k].get("blocked_by"): c = "held back by another package (no release allows it)"
+        elif k in left and any((repo, k, b) in confirmed for b in left[k].get("blocked_by") or []): c = "held back by another package (no release allows it)"
         elif not fixv.get(k): c = "no fixed version reported"
         elif k in left:
             why = left[k].get("why", "")
