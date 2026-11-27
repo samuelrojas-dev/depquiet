@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.59.1] - 2026-11-27
+
 ### Fixed
 - The `[tool.uv] environments` suggestion now says that Dependabot does not read it: Dependabot
   still picks its Python from `requires-python`, so it will not open those updates itself and
@@ -1625,7 +1627,8 @@ requirements.txt and npm projects:
 - CI workflow with lint, typecheck, test matrix (3.11/3.12/3.13), and build
 - Automated release workflow with trusted PyPI publishing
 
-[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.59.0...HEAD
+[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.59.1...HEAD
+[0.59.1]: https://github.com/samuelrojas-dev/depquiet/compare/v0.59.0...v0.59.1
 [0.59.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.58.2...v0.59.0
 [0.58.2]: https://github.com/samuelrojas-dev/depquiet/compare/v0.58.1...v0.58.2
 [0.58.1]: https://github.com/samuelrojas-dev/depquiet/compare/v0.58.0...v0.58.1
