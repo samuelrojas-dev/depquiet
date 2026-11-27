@@ -1,5 +1,5 @@
 name: "depquiet — Verified Dependency Fix Plans"
-description: "Plan the change that closes your dependency alerts, verified with uv or Poetry, and drop alerts only dev tools reach."
+description: "Opens the security-fix pull request Dependabot says it cannot, verified with uv, Poetry or npm."
 author: "Samuel Rojas"
 
 branding:

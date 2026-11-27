@@ -27,6 +27,9 @@ git apply plan.diff             # then run the lock command it prints
 
 Or try it without installing anything: `uvx --with pip-audit depquiet --fix-plan`.
 
+Or let the GitHub Action open the pull request for you, every week (the
+[workflow](#the-pull-request-dependabot-would-not-open) is below).
+
 Five projects have merged pull requests that came from depquiet plans, wagtail among them,
 and one of those merges broke something downstream: [the table](#merged-upstream) says what
 happened in each.
@@ -59,6 +62,46 @@ opened for it, one with uv and one with Poetry, are public:
 
 depquiet verifies resolution only: whether your code works with the new versions, a major
 version change above all, is for your tests to say.
+
+## The pull request Dependabot would not open
+
+Public test repo, November 2026: [depquiet-floor-test](https://github.com/samuelrojas-dev/depquiet-floor-test),
+`requires-python = ">=3.10"` and `[tool.uv] environments = ["python_full_version >= '3.11.5'"]`.
+The fixed pillow and soupsieve releases need Python 3.11 and 3.11.5. Dependabot picks its
+Python from `requires-python`, not from `environments`, so it filters those releases out.
+
+| | Dependabot | depquiet's `fix-pr` Action |
+|---|---|---|
+| pillow | [12.2.0 → 12.3.0](https://github.com/samuelrojas-dev/depquiet-floor-test/pull/1), still 42 advisories (pip-audit) | 12.2.0 → **13.0.0** |
+| soupsieve | no pull request | 2.8.3 → **4.0.0** |
+| Files changed | | `uv.lock` only, `requires-python` still `>=3.10` |
+| Open Dependabot alerts | 64 | **0** after [the merge](https://github.com/samuelrojas-dev/depquiet-floor-test/pull/2) |
+
+```yaml
+# .github/workflows/depquiet-fix.yml
+name: depquiet fix PR
+on:
+  schedule:
+    - cron: "17 6 * * 1"   # Mondays
+  workflow_dispatch:
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: samuelrojas-dev/depquiet@v0
+        with:
+          fix-pr: "true"
+          fail-on-action: "false"
+```
+
+The repository needs Settings > Actions > General > "Allow GitHub Actions to create and
+approve pull requests". With the default `GITHUB_TOKEN`, GitHub does not run your CI on that
+pull request: pass a token in `fix-pr-token` for that. The same Action fixes the pins and
+parent packages from [Before and after](#before-and-after).
 
 ## What the plan handles
 
