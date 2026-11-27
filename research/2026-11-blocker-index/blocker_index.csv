@@ -1,0 +1,30 @@
+blocker,repos,held_packages,advisories,repos_no_release_allows,repos_only_older_allows,held
+crawl4ai,2,2,107,2,0,lxml pillow
+tensordict,2,1,32,0,2,virtualenv
+vllm,2,1,4,2,0,setuptools
+daphne,2,1,2,2,0,autobahn
+camel-ai,1,6,65,1,0,datasets fsspec lxml pillow unstructured yt-dlp
+pandasai,1,1,53,1,0,pillow
+llama-index-core,1,1,53,1,0,pillow
+ansible-runner,1,13,51,0,1,azure-identity daphne djangorestframework dnspython mistune oauthlib pymongo pyzipper requests setuptools soupsieve twisted werkzeug
+google-cloud-bigtable,1,1,42,0,1,pillow
+optimum,1,1,38,1,0,transformers
+pre-commit,1,1,19,1,0,virtualenv
+fastmcp,1,1,8,1,0,mcp
+semgrep,1,3,8,1,0,mcp opentelemetry-api wcmatch
+social-auth-app-django,1,1,7,0,1,social-auth-core
+nemo-toolkit-asr,1,3,5,1,0,fsspec hydra-core lightning
+azureml-core,1,2,5,0,1,cryptography paramiko
+langgraph,1,1,4,1,0,langgraph-sdk
+exp-mitmproxy,1,1,4,1,0,tornado
+langchain,1,1,2,1,0,langchain-text-splitters
+opentelemetry-sdk,1,1,2,1,0,opentelemetry-api
+dagster-cloud,1,1,2,1,0,opentelemetry-api
+tinker,1,1,2,1,0,transformers
+opentelemetry-semantic-conventions,1,1,2,1,0,opentelemetry-api
+arxiv2text,1,1,1,1,0,pypdf2
+datasets,1,1,1,1,0,fsspec
+argostranslate,1,1,1,1,0,stanza
+e2b,1,1,1,1,0,wcmatch
+multi-storage-client,1,1,1,1,0,wcmatch
+megatron-energon,1,1,1,1,0,wcmatch
