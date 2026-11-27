@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.59.2] - 2026-11-27
+
+### Changed
+- README: a section near the top shows the pull request Dependabot would not open, on
+  depquiet-floor-test (`requires-python = ">=3.10"` with `[tool.uv] environments`): Dependabot
+  moved pillow to 12.3.0, still vulnerable, and opened nothing for soupsieve; the `fix-pr`
+  Action moved both to fixed releases in `uv.lock` only, and the 64 open alerts went to 0.
+  PyPI shows the same README.
+- The Action's description, which the GitHub Marketplace shows, now says what it does when
+  Dependabot cannot update.
+
 ## [0.59.1] - 2026-11-27
 
 ### Fixed
@@ -1632,7 +1643,8 @@ requirements.txt and npm projects:
 - CI workflow with lint, typecheck, test matrix (3.11/3.12/3.13), and build
 - Automated release workflow with trusted PyPI publishing
 
-[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.59.1...HEAD
+[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.59.2...HEAD
+[0.59.2]: https://github.com/samuelrojas-dev/depquiet/compare/v0.59.1...v0.59.2
 [0.59.1]: https://github.com/samuelrojas-dev/depquiet/compare/v0.59.0...v0.59.1
 [0.59.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.58.2...v0.59.0
 [0.58.2]: https://github.com/samuelrojas-dev/depquiet/compare/v0.58.1...v0.58.2
