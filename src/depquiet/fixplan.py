@@ -143,6 +143,10 @@ class PlanItem:
     # Packages that hold this fix back and that no release of lets it in: only a
     # change in them unblocks it (the dashboard groups alerts by them).
     blocked_by: list[str] = field(default_factory=list)
+    # The project's own dependencies the fix would move back ("semgrep 1.187.0 →
+    # 1.136.0"): an older release of them allows the fix, and moving back is the
+    # maintainer's call, so the plan leaves the fix out.
+    needs_older: list[str] = field(default_factory=list)
     audit_note: str = ""
     # npm: copies of the package the plan leaves, and why ("glob 10.5.0 under ...").
     leaves: str = ""
@@ -398,6 +402,7 @@ class FixPlan:
                     "why": i.why,
                     "held_by": i.held_by,
                     "blocked_by": i.blocked_by,
+                    "needs_older": i.needs_older,
                     "npm_audit_note": i.audit_note or None,
                 }
                 for i in self.left_out
@@ -1476,6 +1481,8 @@ def build_fix_plan(
         _keep_top_copies(project, executable, items, timeout, report)
     if report and not raise_python_floor and any(i.included for i in items):
         _fork_instead(project, executable, items, result, timeout, include_filtered, report)
+    if report and any(i.included for i in items):
+        _guard_direct(project, executable, items, timeout, report)
     if option is None and report and any(i.included for i in items):
         split = _avoid_split(
             project, executable, [i for i in items if i.included], report[0], timeout
@@ -1926,6 +1933,99 @@ def _fork_instead(
         )
         report[:] = output
         return
+
+
+def _direct_names(project: Path) -> set[str]:
+    """The packages the project itself depends on: dependencies, extras, groups."""
+    names: set[str] = set()
+    for path in _member_pyprojects(project):
+        try:
+            data = tomllib.loads(path.read_text(encoding="utf-8"))
+        except (OSError, tomllib.TOMLDecodeError):
+            continue
+        project_table = data.get("project") or {}
+        found: list[Any] = list(project_table.get("dependencies") or [])
+        for reqs in (project_table.get("optional-dependencies") or {}).values():
+            found += reqs or []
+        for reqs in (data.get("dependency-groups") or {}).values():
+            found += reqs or []
+        found += ((data.get("tool") or {}).get("uv") or {}).get("dev-dependencies") or []
+        for req in found:
+            match = _REQUIREMENT.match(req) if isinstance(req, str) else None
+            if match:
+                names.add(_pep503(match.group("name")))
+    return names
+
+
+def _direct_moved_back(report: str, included: list[PlanItem], direct: set[str]) -> list[LockChange]:
+    """Direct dependencies whose newest locked copy ends older than before.
+
+    A lock forked by Python version that gives only the older Pythons an older
+    copy (warp: beautifulsoup4 4.15.0 → 4.6.3, 4.15.0) is not one: the newest
+    copy stays, and the Python floor section already offers the floor that
+    avoids the split.
+    """
+
+    def newest(versions: str) -> tuple[Any, ...]:
+        return max((version_key(v.strip()) for v in versions.split(",") if v.strip()), default=())
+
+    return [
+        c
+        for c in _uv_lock_changes(report, included)
+        if c.old and c.new and _pep503(c.package) in direct and newest(c.new) < newest(c.old)
+    ]
+
+
+def _guard_direct(
+    project: Path, executable: str, items: list[PlanItem], timeout: int, report: list[str]
+) -> None:
+    """Leave out a fix that only fits by moving one of the project's own dependencies back.
+
+    Real case (depquiet-floor-test demo, 2026-11-27): fixing mcp moved semgrep,
+    which the project depends on directly, from 1.187.0 back to 1.136.0, and 16
+    other packages with it. The plan said so with a warning, but a security fix
+    should not quietly cost a direct dependency 51 releases: the plan keeps the
+    other fixes and reports this one as held back, with the version that allows it.
+    """
+    included = [i for i in items if i.included]
+    direct = _direct_names(project)
+    if not direct or not _direct_moved_back(report[0], included, direct):
+        return
+    kept: list[PlanItem] = []
+    last: list[str] = []
+    with tempfile.TemporaryDirectory(prefix="depquiet-direct-") as tmp:
+        root = Path(tmp) / "project"
+        shutil.copytree(project, root, ignore=_COPY_IGNORE, symlinks=True)
+        for item in included:
+            _apply(root, item.edits)
+            trial: list[str] = []
+            reason = _resolves(root, executable, [*kept, item], timeout, trial)
+            moved = (
+                _direct_moved_back(trial[0], [*kept, item], direct)
+                if reason is None and trial
+                else []
+            )
+            if reason is None and not moved:
+                kept.append(item)
+                last = trial
+                continue
+            _revert(root, item.edits)
+            item.included = False
+            if moved:
+                item.needs_older = [f"{c.package} {c.old} → {c.new}" for c in moved]
+                item.blocked_by = [c.package for c in moved]
+                item.why = (
+                    "fits only by moving "
+                    + ", ".join(f"{c.package} back from {c.old} to {c.new}" for c in moved)
+                    + ", which the project depends on directly: left out. Move it back "
+                    "yourself if you accept that."
+                )
+            else:
+                item.why = f"does not resolve together with the rest: {reason}"
+    if kept and last:
+        report[:] = last
+    elif not kept:
+        report.clear()
 
 
 def _verify_candidates(
