@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- uv plans say which fixes Dependabot cannot open, and why: the release needs a newer Python
+  than the oldest one `requires-python` allows, which is the Python Dependabot resolves for
+  (it ignores `[tool.uv] environments`). The fix pull request gets a "Why Dependabot did not
+  open this" section, the terminal a line, the JSON `dependabot_cannot`. Real run on the
+  state depquiet-floor-test was in before its fix: "pillow 13.0.0 needs Python >=3.11,
+  soupsieve 4.0.0 needs Python >=3.11.5". The Python each release needs comes from PyPI.
+
 ## [0.59.2] - 2026-11-27
 
 ### Changed

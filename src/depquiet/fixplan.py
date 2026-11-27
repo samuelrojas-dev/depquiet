@@ -271,6 +271,38 @@ class FixPlan:
 
     # Planned for filtered alerts too (--fix-filtered): the report lists them.
     include_filtered: bool = False
+    # uv: included fixes whose release needs a newer Python than the oldest one
+    # requires-python allows (package -> that release's lowest Python). Dependabot
+    # resolves for that oldest Python and ignores [tool.uv] environments, so it
+    # cannot open these updates (Dependabot CLI test on stac-auth-proxy and the
+    # depquiet-floor-test repo, 2026-11-27). The plan says so, so a reviewer knows
+    # why the pull request came from depquiet and not from Dependabot.
+    needs_newer_python: dict[str, str] = field(default_factory=dict)
+    project_python: str = ""  # the oldest Python requires-python allows
+    lock_environments: list[str] = field(default_factory=list)  # [tool.uv] environments
+
+    def dependabot_note(self) -> str:
+        """Why Dependabot cannot open these updates ("" when it can)."""
+        if not self.needs_newer_python or not self.project_python:
+            return ""
+        needs = ", ".join(
+            f"{name} {next((i.version for i in self.included if i.package == name), '')} "
+            f"needs Python >={python}"
+            for name, python in self.needs_newer_python.items()
+        )
+        text = (
+            f"Dependabot resolves for the oldest Python requires-python allows "
+            f"({self.project_python}) and filters out releases that need a newer one: {needs}."
+        )
+        if self.lock_environments:
+            text += (
+                " It does not read [tool.uv] environments ("
+                + ", ".join(self.lock_environments)
+                + "), which lets uv lock these releases here."
+            )
+        else:
+            text += " uv locks them only for the Pythons they support."
+        return text
 
     @property
     def edits(self) -> list[PlanEdit]:
@@ -317,6 +349,15 @@ class FixPlan:
         return {
             "status": self.status,
             "tool": self.tool,
+            "dependabot_cannot": (
+                {
+                    "requires_python_oldest": self.project_python,
+                    "needs_newer_python": self.needs_newer_python,
+                    "lock_environments": self.lock_environments,
+                }
+                if self.dependabot_note()
+                else None
+            ),
             "command": self.command,
             "diff": self.diff,
             "note": self.note,
@@ -1474,7 +1515,56 @@ def build_fix_plan(
     )
     if included and report:
         plan.lock_changes = _uv_lock_changes(report[0], included)
+    if included and not (option is not None and option.adopted):
+        _note_newer_pythons(plan, project)
     return plan
+
+
+def _release_pythons(packages: list[tuple[str, str]]) -> dict[str, str]:
+    """Normalized name -> the lowest Python that release supports, from PyPI ("" if unknown)."""
+    import urllib.request
+    from concurrent.futures import ThreadPoolExecutor
+
+    def one(item: tuple[str, str]) -> tuple[str, str]:
+        name, version = item
+        url = f"https://pypi.org/pypi/{_pep503(name)}/{version}/json"
+        try:
+            with urllib.request.urlopen(url, timeout=15) as response:
+                spec = (json.load(response).get("info") or {}).get("requires_python") or ""
+        except (OSError, ValueError):
+            return _pep503(name), ""
+        return _pep503(name), _old_floor(spec) if isinstance(spec, str) else ""
+
+    if not packages:
+        return {}
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        return dict(pool.map(one, packages))
+
+
+def _note_newer_pythons(plan: FixPlan, project: Path) -> None:
+    """Record the included fixes Dependabot cannot open: they need a newer Python."""
+    oldest = _project_floor(project)
+    if not oldest:
+        return
+    found = _release_pythons([(i.package, i.version) for i in plan.included])
+    needs = {
+        i.package: found[_pep503(i.package)]
+        for i in plan.included
+        if found.get(_pep503(i.package))
+        and version_key(found[_pep503(i.package)]) > version_key(oldest)
+    }
+    if not needs:
+        return
+    plan.needs_newer_python, plan.project_python = needs, oldest
+    try:
+        data = tomllib.loads((project / "pyproject.toml").read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return
+    envs = ((data.get("tool") or {}).get("uv") or {}).get("environments")
+    if isinstance(envs, str):
+        envs = [envs]
+    if isinstance(envs, list):
+        plan.lock_environments = [e for e in envs if isinstance(e, str)]
 
 
 def _final_versions(report: str) -> dict[str, list[str]]:
@@ -2060,6 +2150,8 @@ def fix_plan_markdown(plan: FixPlan, result: ScanResult, version: str = "") -> s
             f"| `{cell(item.package)}` | {cell(item.installed or '?')} "
             f"| {cell(item.version)}{major} | {cell(ids)} | {cell(_how(item))} |"
         )
+    if plan.dependabot_note():
+        lines += ["", "### Why Dependabot did not open this", "", cell(plan.dependabot_note())]
     offered = [(i, i.audit_note) for i in plan.included if i.audit_note]
     if offered:
         # The reason to read this pull request instead of running the tool's own
@@ -2291,6 +2383,8 @@ def print_fix_plan(plan: FixPlan, file: Any) -> None:
             verb = "resolves" if partial == 1 else "resolve together"
             verdict = f"{fixes} on your current Python range {verb}"
         resolver = resolver_name(plan.tool)
+        if plan.dependabot_note():
+            print(f"\n   {plan.dependabot_note()}", file=file)
         print(f"\n   Verified with {resolver} resolver: {verdict}.", file=file)
         print(f"   Then run: {plan.command}", file=file)
         print(f"   {plan.note}", file=file)

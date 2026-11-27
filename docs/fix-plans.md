@@ -204,7 +204,11 @@ Python arrives as a pull request. Real run on
 12.2.0 and soupsieve 2.8.3 locked, 64 open Dependabot alerts. Dependabot's own pull request
 only went to pillow 12.3.0, still vulnerable. The Action verified pillow 13.0.0 and soupsieve
 4.0.0 with uv and opened a pull request that changed only `uv.lock`; after the merge, GitHub
-marked all 64 alerts fixed. The repository needs Settings > Actions > General > "Allow GitHub
+marked all 64 alerts fixed. The pull request also says why Dependabot did not open it: "Dependabot resolves for the oldest
+Python requires-python allows (3.10) and filters out releases that need a newer one: pillow
+13.0.0 needs Python >=3.11, soupsieve 4.0.0 needs Python >=3.11.5. It does not read [tool.uv]
+environments (python_full_version >= '3.11.5'), which lets uv lock these releases here." (the
+terminal prints the same line, the JSON has it as `dependabot_cannot`). The repository needs Settings > Actions > General > "Allow GitHub
 Actions to create and approve pull requests", and with the default `GITHUB_TOKEN` your CI does
 not run on that pull request: pass `fix-pr-token` for that.
 
