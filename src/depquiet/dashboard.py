@@ -189,6 +189,11 @@ def dashboard_markdown(
     if fixed:
         link = PR_PLACEHOLDER if pr_line is None else pr_line
         lines += ["", "### ✅ Fixed in the fix pull request", "", link, ""]
+        # A fix that only fits by moving other packages back is not free: on
+        # depquiet-floor-test, fixing mcp moved semgrep 1.187.0 back to 1.136.0.
+        warning = plan.downgrade_warning() if plan else ""
+        if warning:
+            lines += [f"⚠ {warning}", ""]
         needs = plan.needs_newer_python if plan else {}
         for pkg, item in fixed:
             note = (

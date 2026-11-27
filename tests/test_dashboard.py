@@ -155,3 +155,11 @@ def test_an_npm_fix_within_the_declared_ranges_says_npm_audit_fix() -> None:
     body = dashboard_markdown(_scan(TriageResult(vuln, Verdict.ACTION)), None)
     assert "- `uuid` (1 advisory): `npm audit fix` updates it within your declared ranges." in body
     assert "No fixed version reported" not in body
+
+
+def test_a_fix_that_moves_other_packages_back_says_so() -> None:
+    scan = _scan(_r("mcp", "CVE-1", "1.30.0"))
+    plan = fp.FixPlan("verified", items=[_item("mcp", "1.30.0", installed="1.29.0", included=True)])
+    plan.lock_changes = [fp.LockChange("semgrep", "1.187.0", "1.136.0")]
+    body = dashboard_markdown(scan, plan, pr_line="")
+    assert "⚠ The lock moves semgrep to an older version to fit the fixes together" in body
