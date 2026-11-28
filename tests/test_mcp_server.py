@@ -123,6 +123,7 @@ def test_server_registers_both_tools() -> None:
 
 def test_agents_are_told_planning_runs_build_code() -> None:
     """End-to-end review (2026-11-27): the CLI said "trusted code only", the MCP tool did not."""
+    pytest.importorskip("pydantic")  # mcp_tools needs it; it comes with depquiet[mcp]
     from depquiet.mcp_tools import PLAN_DESCRIPTION
 
     assert "use it only on code the user trusts" in PLAN_DESCRIPTION
