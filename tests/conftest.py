@@ -18,12 +18,14 @@ def _no_cve_alias_lookups(request, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _no_pip_audit_lookups(request, monkeypatch):
-    """Fix plans in tests must not run pip-audit on candidate releases.
+    """Fix plans in tests must not look up the advisories of candidate releases.
 
-    Tests of that check opt in with ``@pytest.mark.advisory_lookups`` and fake it.
+    Neither with pip-audit nor on PyPI. Tests of those opt in with
+    ``@pytest.mark.advisory_lookups`` and fake it.
     """
     if request.node.get_closest_marker("advisory_lookups") is None:
         monkeypatch.setattr("depquiet.fixplan._advisories", lambda *a, **k: {})
+        monkeypatch.setattr("depquiet.fixplan._release_advisories", lambda *a, **k: {})
 
 
 @pytest.fixture(autouse=True)

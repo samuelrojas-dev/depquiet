@@ -128,6 +128,10 @@ class PlanItem:
     fixed_in: str = ""  # the advisory's fix, when ``version`` is a newer release already locked
     # Not asked for, but the verified lock moves it past the fix anyway.
     carried: bool = False
+    # The advisory's fix when that release carries advisories of its own and the
+    # plan moves on to the one that fixes those too. LightRAG (2026-11-27): the
+    # fix for virtualenv was 21.14.10, which has PYSEC-2026-4402, fixed in 21.14.13.
+    stepped_from: str = ""
     # Set on the newest fix that installs on the current Python range, when the
     # full fix needs a newer Python: "closes 5 of 8 alerts; 3 need Python >=3.11.5".
     partial: str = ""
@@ -373,6 +377,7 @@ class FixPlan:
                     "package": i.package,
                     "version": i.version,
                     "fixed_in": i.fixed_in or None,
+                    "stepped_from": i.stepped_from or None,
                     "carried": i.carried,
                     "partial": i.partial or None,
                     "forked_below": i.forked_below or None,
@@ -1437,6 +1442,7 @@ def build_fix_plan(
 
     report: list[str] = []
     if candidates:
+        _step_past_vulnerable_fixes(project, candidates)
         _verify_candidates(project, executable, candidates, timeout, report)
     option = None
     if waiting:
@@ -2164,12 +2170,95 @@ def _verify_candidates(
             for item in candidates:
                 _apply(root, item.edits)
                 reason = _resolves(root, executable, [*kept, item], timeout, report)
+                if reason is not None and item.stepped_from:
+                    # The later release does not fit: the advisory's own fix still might.
+                    _revert(root, item.edits)
+                    _step_back(project, item)
+                    _apply(root, item.edits)
+                    reason = _resolves(root, executable, [*kept, item], timeout, report)
                 if reason is None:
                     item.included = True
                     kept.append(item)
                 else:
                     _revert(root, item.edits)
                     item.why = f"does not resolve together with the rest: {reason}"
+
+
+def _release_advisories(
+    packages: list[tuple[str, str]],
+) -> dict[tuple[str, str], list[dict[str, Any]]]:
+    """(name, version) -> that release's advisories on PyPI; a pair is missing if PyPI can't say."""
+    import urllib.request
+    from concurrent.futures import ThreadPoolExecutor
+
+    def one(item: tuple[str, str]) -> tuple[tuple[str, str], list[dict[str, Any]] | None]:
+        name, version = item
+        url = f"https://pypi.org/pypi/{_pep503(name)}/{version}/json"
+        try:
+            with urllib.request.urlopen(url, timeout=15) as response:
+                found = json.load(response).get("vulnerabilities")
+        except (OSError, ValueError):
+            return item, None
+        return item, [v for v in found if isinstance(v, dict)] if isinstance(found, list) else None
+
+    if not packages:
+        return {}
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        return {key: vulns for key, vulns in pool.map(one, packages) if vulns is not None}
+
+
+def _next_fix(version: str, advisories: list[dict[str, Any]]) -> str:
+    """The release that fixes every advisory ``version`` carries that has a fix; "" if none."""
+    target = ""
+    for advisory in advisories:
+        if advisory.get("withdrawn"):
+            continue
+        later = [
+            f
+            for f in advisory.get("fixed_in") or []
+            if isinstance(f, str) and version_key(f) > version_key(version)
+        ]
+        if later:
+            first = min(later, key=version_key)
+            if not target or version_key(first) > version_key(target):
+                target = first
+    return target
+
+
+def _step_past_vulnerable_fixes(project: Path, candidates: list[PlanItem], steps: int = 3) -> None:
+    """Move each fix past advisories that the fixed release itself carries.
+
+    An advisory names the first release that fixes it, and that release can
+    carry advisories published later. LightRAG (2026-11-27): the plan moved
+    virtualenv to 21.14.10 and langgraph-sdk to 0.4.4, which a scan of the new
+    lock flagged again (PYSEC-2026-4402, fixed in 21.14.13; CVE-2026-118667,
+    fixed in 0.4.6). PyPI lists each release's advisories, so the plan asks
+    before proposing a version, and verifies the later one with the rest.
+    """
+    pending = [i for i in candidates if not (i.carried or i.partial or i.forked_below)]
+    for _ in range(steps):
+        found = _release_advisories([(i.package, i.version) for i in pending])
+        moved = []
+        for item in pending:
+            target = _next_fix(item.version, found.get((item.package, item.version), []))
+            if not target:
+                continue
+            edits = _edits_for(project, item.package, target) if item.edits else []
+            if item.edits and not edits:
+                continue
+            item.stepped_from = item.stepped_from or item.version
+            item.version, item.edits = target, edits or item.edits
+            moved.append(item)
+        if not moved:
+            return
+        pending = moved
+
+
+def _step_back(project: Path, item: PlanItem) -> None:
+    """Back to the advisory's own fix, when the later release does not resolve."""
+    item.version, item.stepped_from = item.stepped_from, ""
+    if item.edits:
+        item.edits = _edits_for(project, item.package, item.version)
 
 
 # A lock forked by Python version lists each locked version: ``Update x v1.0, v2.0 -> v2.0``.
@@ -2284,6 +2373,11 @@ def apply_fix_plan(plan: FixPlan, project: Path, *, timeout: int = 900) -> str:
 
 def _how(item: PlanItem) -> str:
     text = _how_change(item)
+    if item.stepped_from:
+        text += (
+            f"; {item.stepped_from}, the advisory's fix, has advisories of its own, "
+            f"fixed in {item.version}"
+        )
     return f"{text}; it leaves {item.leaves}" if item.leaves else text
 
 
@@ -2567,6 +2661,12 @@ def print_fix_plan(plan: FixPlan, file: Any) -> None:
             print(
                 f"     (asking for {item.fixed_in or item.version} itself did not resolve; "
                 f"the verified lock takes it to {item.version}, past the fix)",
+                file=file,
+            )
+        elif item.stepped_from:
+            print(
+                f"     ({item.stepped_from}, the advisory's fix, has advisories of its own, "
+                f"fixed in {item.version})",
                 file=file,
             )
         elif item.fixed_in:

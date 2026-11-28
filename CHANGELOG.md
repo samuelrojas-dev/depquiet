@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- The plan no longer proposes a fix that carries advisories of its own. An advisory names the
+  first release that fixes it, and that release can have advisories published later: on
+  LightRAG, the plan moved virtualenv to 21.14.10 and langgraph-sdk to 0.4.4, and a scan of the
+  new lock flagged both again (fixed in 21.14.13 and 0.4.6). Each fixed release's advisories are
+  now read from PyPI, and the plan moves on to the release that fixes those too, verified with
+  the rest. If that later release does not resolve, the advisory's own fix is kept. The plan says
+  so: "21.14.10, the advisory's fix, has advisories of its own, fixed in 21.14.13".
+
 ## [0.60.4] - 2026-11-27
 
 ### Fixed
