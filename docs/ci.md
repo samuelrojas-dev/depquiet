@@ -19,6 +19,8 @@ with ratings) to gate on it.
   OSV.dev while `--offline` is set, or an input that cannot be read (`--stdin`,
   `--from-sbom`, `--kev-file`, `--baseline`). depquiet never reports an unscanned project
   as clean.
+- `3` — depquiet itself failed: an unexpected error, which is a bug. It prints one line to
+  report and never counts as a clean scan; `DEPQUIET_DEBUG=1` shows the traceback.
 
 ## GitHub Actions (Marketplace)
 

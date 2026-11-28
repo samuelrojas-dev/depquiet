@@ -462,8 +462,36 @@ def _utf8_streams() -> None:
                 stream.reconfigure(encoding="utf-8", errors="replace")
 
 
+ISSUES_URL = "https://github.com/samuelrojas-dev/depquiet/issues/new"
+
+
 def main(argv: list[str] | None = None) -> int:
-    """Run the depquiet CLI. Returns exit code."""
+    """Run the depquiet CLI. Returns exit code.
+
+    An unexpected error is a bug: it gets one plain message and exit code 3,
+    not a traceback (a linked pyproject.toml crashed --fix-plan with a raw
+    ValueError, end-to-end review, 2026-11-27). DEPQUIET_DEBUG=1 shows the
+    traceback.
+    """
+    try:
+        return _main(argv)
+    except KeyboardInterrupt:
+        print("\ndepquiet: interrupted.", file=sys.stderr)
+        return 130
+    except Exception as exc:
+        if os.environ.get("DEPQUIET_DEBUG"):
+            raise
+        print(
+            f"depquiet {__version__}: unexpected error: {type(exc).__name__}: {exc}\n"
+            "This is a bug in depquiet, not in your project. Please report it with the "
+            f"command you ran: {ISSUES_URL}\n"
+            "Run it again with DEPQUIET_DEBUG=1 to see the full traceback.",
+            file=sys.stderr,
+        )
+        return 3
+
+
+def _main(argv: list[str] | None = None) -> int:
     _utf8_streams()
     # Dispatch to subcommands before argparse sees them
     effective = argv if argv is not None else sys.argv[1:]
