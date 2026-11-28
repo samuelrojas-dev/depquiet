@@ -70,3 +70,21 @@ def test_a_fix_in_the_parent_names_the_parent(capsys) -> None:
     print_scan_result(ScanResult(".", "npm", 1, [row]), plan_follows=True)
     out = capsys.readouterr().out
     assert "postcss-selector-parser  1 alert  FIX: update @tailwindcss/typography to 0.5.4" in out
+
+
+def test_a_first_scan_groups_by_package_too(capsys) -> None:
+    """depquiet-floor-test (2026-11-27): 71 alerts on 170 lines, pillow's with two fixes."""
+    rows = [
+        TriageResult(
+            vuln=Vulnerability(f"PYSEC-{i}", "pillow", "12.2.0", Severity.HIGH, fix_version=fix),
+            verdict=Verdict.ACTION,
+            dependency_type="transitive",
+            introduced_by=["app"],
+        )
+        for i, fix in enumerate(["12.3.0", "13.0.0", "12.3.0"])
+    ]
+    print_scan_result(ScanResult(".", "pip", 1, rows))
+    out = capsys.readouterr().out
+    assert "pillow  3 alerts  FIX: update to 13.0.0" in out
+    assert "via app" in out
+    assert "FIX: update to 12.3.0" not in out

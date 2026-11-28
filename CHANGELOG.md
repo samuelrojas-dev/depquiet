@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- A first scan groups ACTION alerts by package, with the highest fix: on depquiet-floor-test,
+  71 alerts took 170 lines, pillow's 40 of them with two different fix versions. Alerts are
+  listed one by one only when `--check-fixes` reports on each fix.
+- After a scan with fixable alerts in a uv, Poetry or npm project, the report ends with the next
+  step: `depquiet --fix-plan`, which checks one change for all of them and changes nothing
+  (`depquiet --fix` applies it).
+- `--help` matches what works: `--fix-plan` and `--apply` cover uv, Poetry and npm, and
+  `--raise-python-floor` uv and Poetry. The note for other projects no longer says that npm uses
+  `--fix`: npm has a verified `--fix-plan`.
+
 ### Fixed
 - `--fix` applies the verified fix plan in uv, Poetry and npm projects (the same as
   `--fix-plan --apply`). It used to run one upgrade per alert: on depquiet-floor-test it moved

@@ -415,8 +415,8 @@ def check_fixes(
     # would not help, so "needs uv on PATH" would send the user the wrong way.
     if not (project / "uv.lock").exists():
         return {}, (
-            "--check-fixes works on projects with a uv.lock (on a Poetry project, "
-            "--fix-plan verifies the fixes). On npm, --fix installs the fixes."
+            "--check-fixes works on projects with a uv.lock. On a Poetry or npm project, "
+            "--fix-plan verifies the fixes with that resolver."
         )
     if shutil.which("uv") is None:
         return {}, "--check-fixes needs uv on PATH."
