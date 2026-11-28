@@ -22,8 +22,12 @@ that lets the fixes install together. Your project is not touched until you appl
 ```bash
 pip install depquiet pip-audit
 depquiet --fix-plan plan.diff   # the change, verified with uv, Poetry or npm
-git apply plan.diff             # then run the lock command it prints
+git apply plan.diff             # if the plan edits requirement files (it says so)
+                                # then run the lock command it prints
 ```
+
+Or apply the whole verified plan in one step: `depquiet --fix` (it relocks, and puts every file
+back if that fails).
 
 Or try it without installing anything: `uvx --with pip-audit depquiet --fix-plan`.
 
