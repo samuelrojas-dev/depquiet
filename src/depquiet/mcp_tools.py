@@ -37,7 +37,9 @@ PLAN_DESCRIPTION = (
     "action alerts; only uv, Poetry and npm (package-lock.json) projects get a plan (for "
     "others it explains why there is none). Read-only: never edits or relocks the project; "
     "show the user the plan and apply the diff only when they agree. Needs network access, "
-    "and resolving can build source distributions and take a few minutes on large projects."
+    "and can take a few minutes on large projects. Resolving can build source distributions, "
+    "which runs the build code of the project and its dependencies: use it only on code the "
+    "user trusts, and ask before running it on a repository that was just cloned."
 )
 
 Path = Annotated[

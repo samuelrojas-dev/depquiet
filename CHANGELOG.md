@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- The Action's fix pull request no longer force-pushes over a commit someone added to it (a test
+  fix, say): when the branch's last commit is not depquiet's, the run leaves the branch and the
+  pull request alone, and says so.
+- The MCP tool `plan_fixes` says that resolving can run the build code of the project and its
+  dependencies, so agents use it only on code the user trusts, and it is no longer marked
+  read-only, which some clients take as leave to run it without asking.
+
 ## [0.61.0] - 2026-11-27
 
 ### Changed
