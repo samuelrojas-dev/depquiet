@@ -332,3 +332,15 @@ def test_init_refuses_a_missing_project_directory(tmp_path):
     missing = tmp_path / "typo"
     assert init_command(missing, yes=True) == 2
     assert not missing.exists()
+
+
+def test_a_poetry_or_uv_project_is_named_by_its_lock(tmp_path) -> None:
+    """End-to-end review (2026-11-27): init said "Package managers: pip" on a Poetry project."""
+    from depquiet.init import detect_project
+
+    (tmp_path / "pyproject.toml").write_text("[tool.poetry]\n", encoding="utf-8")
+    (tmp_path / "poetry.lock").write_text("", encoding="utf-8")
+    assert detect_project(tmp_path).package_managers == ["poetry"]
+    (tmp_path / "poetry.lock").unlink()
+    (tmp_path / "uv.lock").write_text("version = 1\n", encoding="utf-8")
+    assert detect_project(tmp_path).package_managers == ["uv"]

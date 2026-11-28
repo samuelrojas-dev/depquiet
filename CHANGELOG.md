@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The MCP tool `plan_fixes` says that resolving can run the build code of the project and its
   dependencies, so agents use it only on code the user trusts, and it is no longer marked
   read-only, which some clients take as leave to run it without asking.
+- A fix held back by a package whose newest release caps it ends with that requirement
+  (`semgrep 1.187.0 requires wcmatch~=8.3`), without uv's message cut to fit after it.
+- `depquiet init` names a Poetry or uv project by its lock instead of "pip".
 
 ## [0.61.0] - 2026-11-27
 

@@ -82,11 +82,10 @@ def test_a_blocker_whose_newest_release_caps_the_fix_holds_it_back(
 ) -> None:
     plan, mcp = _plan(tmp_path, monkeypatch, {"semgrep": ("1.187.0", ["mcp==1.29.0"])})
     assert mcp.blocked_by == ["semgrep"]
-    assert mcp.why.startswith(
+    assert mcp.why == (
         "blocked by semgrep, and no release of it allows the fix: the newest, "
-        "semgrep 1.187.0 requires mcp==1.29.0. uv: "
+        "semgrep 1.187.0 requires mcp==1.29.0."
     )
-    assert "semgrep==1.187.0 depends on mcp==1.29.0" in mcp.why
     body = dashboard_markdown(_result(), plan, pr_line="")
     assert "No release of `semgrep` lets these fixes in yet" in body
 

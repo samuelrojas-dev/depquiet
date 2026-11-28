@@ -1692,9 +1692,11 @@ def _explain_blockers(item: PlanItem, blockers: list[str], explain: str) -> None
     if capped:
         item.blocked_by = list(capped)
         them = "it" if len(capped) == 1 else "them"
+        # The capping requirement is the whole explanation: uv's own words, cut
+        # to fit a line, only added noise after it (end-to-end review).
         item.why = (
             f"blocked by {', '.join(capped)}, and no release of {them} allows the fix: "
-            f"the newest, {'; '.join(capped.values())}. uv: {explain}"
+            f"the newest, {'; '.join(capped.values())}."
         )
     elif len(allowing) < len(blockers):
         them = "it" if len(blockers) == 1 else "them"

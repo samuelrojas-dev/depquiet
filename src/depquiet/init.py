@@ -98,6 +98,12 @@ def detect_project(project: Path) -> ProjectInfo:
     for name, patterns in _PM_SIGNALS:
         if _match_signal(project, patterns):
             info.package_managers.append(name)
+    # A Python project's lock names its tool: "pip" read as wrong on a Poetry project.
+    if "pip" in info.package_managers:
+        for lock, tool in (("uv.lock", "uv"), ("poetry.lock", "poetry")):
+            if (project / lock).is_file():
+                info.package_managers[info.package_managers.index("pip")] = tool
+                break
 
     for name, patterns in _CI_SIGNALS:
         if _match_signal(project, patterns):
