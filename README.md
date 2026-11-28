@@ -31,6 +31,16 @@ back if that fails).
 
 Or try it without installing anything: `uvx --with pip-audit depquiet --fix-plan`.
 
+Already running `uv audit`? It tells you what is vulnerable; depquiet takes its report and
+works out how to fix it, checked with uv:
+
+```bash
+uv audit --frozen --output-format json | depquiet --stdin --fix-plan
+```
+
+In a uv project without pip-audit installed, plain `depquiet` audits `uv.lock` with `uv audit`
+on its own.
+
 Or let the GitHub Action open the pull request for you, every week (the
 [workflow](#the-pull-request-dependabot-would-not-open) is below).
 

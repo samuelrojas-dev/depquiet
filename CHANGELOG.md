@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.61.2] - 2026-11-27
+
+### Changed
+- The README says how depquiet follows `uv audit`: pipe its JSON report into
+  `depquiet --stdin --fix-plan` for a fix plan checked with uv, and in a uv project without
+  pip-audit, plain `depquiet` already audits `uv.lock` with `uv audit` on its own. Checked with
+  uv 0.13.10.
+
 ## [0.61.1] - 2026-11-27
 
 ### Fixed
@@ -1763,7 +1771,8 @@ requirements.txt and npm projects:
 - CI workflow with lint, typecheck, test matrix (3.11/3.12/3.13), and build
 - Automated release workflow with trusted PyPI publishing
 
-[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.61.1...HEAD
+[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.61.2...HEAD
+[0.61.2]: https://github.com/samuelrojas-dev/depquiet/compare/v0.61.1...v0.61.2
 [0.61.1]: https://github.com/samuelrojas-dev/depquiet/compare/v0.61.0...v0.61.1
 [0.61.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.60.5...v0.61.0
 [0.60.5]: https://github.com/samuelrojas-dev/depquiet/compare/v0.60.4...v0.60.5
