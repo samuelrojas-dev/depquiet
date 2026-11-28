@@ -112,10 +112,22 @@ def test_server_needs_the_sdk_and_says_how_to_get_it(monkeypatch) -> None:
         mcp_server.main()
 
 
-def test_server_registers_both_tools_read_only() -> None:
+def test_server_registers_both_tools() -> None:
     tools = _listed_tools()
     assert set(tools) == {"triage_alerts", "plan_fixes"}
-    assert all(t.annotations and t.annotations.read_only_hint for t in tools.values())
+    assert tools["triage_alerts"].annotations.read_only_hint is True
+    # Resolving can run build code: a client must not treat plan_fixes as read-only.
+    plan = tools["plan_fixes"].annotations
+    assert plan.read_only_hint is False and plan.destructive_hint is False
+
+
+def test_agents_are_told_planning_runs_build_code() -> None:
+    """End-to-end review (2026-11-27): the CLI said "trusted code only", the MCP tool did not."""
+    pytest.importorskip("pydantic")  # mcp_tools needs it; it comes with depquiet[mcp]
+    from depquiet.mcp_tools import PLAN_DESCRIPTION
+
+    assert "use it only on code the user trusts" in PLAN_DESCRIPTION
+    assert "only on code the user trusts" in mcp_server._INSTRUCTIONS
 
 
 def _listed_tools() -> dict:

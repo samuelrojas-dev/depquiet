@@ -245,3 +245,39 @@ def test_npm_project_commits_package_json_and_its_lock(repo) -> None:
         "apps/client portal/package-lock.json",
         "apps/client portal/package.json",
     ]
+
+
+def test_a_new_run_replaces_depquiets_own_branch(repo) -> None:
+    _, project, remote, _, shell = repo
+    _apply(project)
+    assert _run_step("Open fix pull request", shell).returncode == 0
+    (project / "uv.lock").write_text('name = "requests"\nversion = "2.33.1"\n')
+    result = _run_step("Open fix pull request", shell)
+    assert result.returncode == 0, result.stderr
+    shown = _git(remote, "show", "depquiet/security-fixes:apps/client portal/uv.lock")
+    assert "2.33.1" in shown
+
+
+def test_a_maintainers_commit_on_the_branch_is_kept(repo, tmp_path) -> None:
+    """End-to-end review (2026-11-27): each run force-pushed the branch, so a commit a
+    maintainer added to the pull request (a test fix, say) was lost on the next run."""
+    _, project, remote, _, shell = repo
+    _, env = shell
+    _apply(project)
+    assert _run_step("Open fix pull request", shell).returncode == 0
+    other = tmp_path / "maintainer"
+    _git(tmp_path, "clone", "-q", "-b", "depquiet/security-fixes", str(remote), str(other))
+    _git(other, "config", "user.email", "maintainer@example.com")
+    _git(other, "config", "user.name", "maintainer")
+    (other / "apps" / "client portal" / "notes.txt").write_text("adjusted a test\n")
+    _git(other, "commit", "-q", "-am", "test: adjust for requests 2.33")
+    _git(other, "push", "-q", "origin", "depquiet/security-fixes")
+    Path(env["GH_CALLS"]).unlink(missing_ok=True)
+    (project / "uv.lock").write_text('name = "requests"\nversion = "2.33.1"\n')
+    result = _run_step("Open fix pull request", shell)
+    assert result.returncode == 0, result.stderr
+    assert "has a commit depquiet did not make (test: adjust for requests 2.33)" in result.stdout
+    tip = _git(remote, "log", "-1", "--format=%ae %s", "depquiet/security-fixes")
+    assert tip == "maintainer@example.com test: adjust for requests 2.33"
+    assert _gh_calls(env) == []
+    assert TOKEN not in result.stdout + result.stderr

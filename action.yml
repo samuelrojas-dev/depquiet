@@ -120,7 +120,7 @@ inputs:
     required: false
     default: "false"
   fix-pr-branch:
-    description: "Branch for the fix pull request. It is force-pushed on every run: do not commit to it by hand."
+    description: "Branch for the fix pull request. Each run replaces it, unless its last commit is someone else's: then the run leaves the branch and its pull request alone."
     required: false
     default: "depquiet/security-fixes"
   dashboard:
@@ -564,9 +564,19 @@ runs:
           commit -q -m "$TITLE"
         # Push with the given token even when checkout left its own credentials.
         SERVER="${GITHUB_SERVER_URL:-https://github.com}"
-        git -c "http.${SERVER}/.extraheader=" push -q --force \
-          "${SERVER/https:\/\//https://x-access-token:${GH_TOKEN}@}/${GITHUB_REPOSITORY}.git" \
-          "HEAD:refs/heads/$BRANCH"
+        REMOTE="${SERVER/https:\/\//https://x-access-token:${GH_TOKEN}@}/${GITHUB_REPOSITORY}.git"
+        # The branch is depquiet's, and each run replaces it. If its last commit is not
+        # depquiet's, someone added work to the pull request: leave it alone.
+        BOT="41898282+github-actions[bot]@users.noreply.github.com"
+        if git -c "http.${SERVER}/.extraheader=" fetch -q --depth=1 "$REMOTE" "refs/heads/$BRANCH" 2>/dev/null; then
+          TIP="$(git log -1 --format='%ae%x09%s' FETCH_HEAD)"
+          if [ "$TIP" != "$BOT"$'\t'"$TITLE" ]; then
+            git reset -q --hard HEAD~1
+            echo "::warning::depquiet: $BRANCH has a commit depquiet did not make (${TIP#*$'\t'}), so this run leaves the branch and its pull request as they are. Merge or close that pull request, or delete the branch, and the next run opens a new one."
+            exit 0
+          fi
+        fi
+        git -c "http.${SERVER}/.extraheader=" push -q --force "$REMOTE" "HEAD:refs/heads/$BRANCH"
         # Leave the checkout as the workflow had it.
         git reset -q --hard HEAD~1
         EXISTING=$(gh pr list --head "$BRANCH" --base "$BASE" --state open --json number --jq '.[0].number // empty')

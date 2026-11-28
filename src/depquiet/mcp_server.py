@@ -170,11 +170,12 @@ def plan_fixes(
 
 _INSTRUCTIONS = (
     "depquiet triages dependency vulnerability alerts and plans the change that closes "
-    "them, verified with the project's own resolver (uv or Poetry) on a temporary copy. "
+    "them, verified with the project's own resolver (uv, Poetry or npm) on a temporary copy. "
     "Use triage_alerts to see which alerts matter, then plan_fixes for the exact diff and "
     "lock command. Neither tool edits the project: show the user the plan, and apply the "
-    "diff or run the command only when they agree. Raising requires-python drops Python "
-    "versions; ask before passing raise_python_floor=true."
+    "diff or run the command only when they agree. plan_fixes can run the build code of the "
+    "project and its dependencies, like uv lock or npm install: only on code the user trusts. "
+    "Raising requires-python drops Python versions; ask before passing raise_python_floor=true."
 )
 
 
@@ -193,10 +194,16 @@ def build_server() -> Any:
         description=tools.TRIAGE_DESCRIPTION,
         annotations=read_only,
     )(tools.triage_alerts)
+    # plan_fixes edits nothing in the project, but resolving can run build code
+    # (sdists of the project and its dependencies): not a read-only tool that a
+    # client may run without asking.
+    builds = ToolAnnotations(
+        read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=True
+    )
     server.tool(
         name="plan_fixes",
         description=tools.PLAN_DESCRIPTION,
-        annotations=read_only,
+        annotations=builds,
     )(tools.plan_fixes)
     return server
 
