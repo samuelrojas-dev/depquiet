@@ -490,6 +490,28 @@ def widen(requirement: str, version: str) -> str | None:
     return f"{name}{','.join(out)}{marker}"
 
 
+def _inside(path: Path, project: Path) -> str | None:
+    """``path`` relative to the project, as the plan names it; None if it lives outside.
+
+    A pyproject.toml can be a link to a file outside the project: depquiet then
+    crashed with a ValueError (end-to-end review, 2026-11-27).
+    """
+    try:
+        return str(path.resolve().relative_to(project.resolve())).replace("\\", "/")
+    except ValueError:
+        return None
+
+
+def _linked_outside(project: Path) -> list[str]:
+    """Requirement files that are links to files outside the project."""
+    candidates = [*_member_pyprojects(project), project / "uv.toml"]
+    return [
+        f"{p.relative_to(project).as_posix() if p.is_relative_to(project) else p} → {p.resolve()}"
+        for p in candidates
+        if p.exists() and _inside(p, project) is None
+    ]
+
+
 def _member_pyprojects(project: Path) -> list[Path]:
     """The root pyproject.toml and those of workspace members in uv.lock."""
     files = [project / "pyproject.toml"]
@@ -535,8 +557,8 @@ def _edits_for(project: Path, package: str, version: str) -> list[PlanEdit]:
             if not match or _pep503(match.group("name")) != key:
                 continue
             new = widen(req, version)
-            if new is not None and new != req:
-                rel = str(path.resolve().relative_to(project.resolve())).replace("\\", "/")
+            rel = _inside(path, project)
+            if new is not None and new != req and rel is not None:
                 edits.append(PlanEdit(file=rel, package=package, old=req, new=new))
     return edits
 
@@ -1000,7 +1022,9 @@ def _edits_matching(project: Path, package: str) -> list[PlanEdit]:
             data = tomllib.loads(path.read_text(encoding="utf-8"))
         except (OSError, tomllib.TOMLDecodeError):
             continue
-        rel = str(path.resolve().relative_to(project.resolve())).replace("\\", "/")
+        rel = _inside(path, project)
+        if rel is None:
+            continue
         for req in dict.fromkeys(_requirement_strings(data)):
             match = _REQUIREMENT.match(req)
             if match and _pep503(match.group("name")) == key:
@@ -1096,7 +1120,9 @@ def _floor_edits(project: Path, floor: str) -> tuple[list[PlanEdit], str, str]:
         spec = (data.get("project") or {}).get("requires-python")
         if not isinstance(spec, str):
             continue
-        rel = str(path.resolve().relative_to(project.resolve())).replace("\\", "/")
+        rel = _inside(path, project)
+        if rel is None:
+            continue
         new = raise_floor(spec, floor)
         if new is None:
             problem = f"{rel} declares requires-python {spec!r}, which depquiet will not rewrite."
@@ -1370,6 +1396,13 @@ UNSUPPORTED_NOTE = (
 NOTHING_TO_FIX = "Nothing to fix: no Python alert left to act on has a fixed version."
 
 
+LINKED_OUTSIDE_NOTE = (
+    "{files}: a link to a file outside the project. depquiet verifies the plan on a copy of "
+    "the project, which cannot follow that link, so it plans nothing here. Run depquiet in the "
+    "folder that holds the real file, or replace the link with the file."
+)
+
+
 def build_fix_plan(
     result: ScanResult,
     project: Path,
@@ -1383,6 +1416,9 @@ def build_fix_plan(
     # project "nothing to fix" would be false.
     if not (project / "uv.lock").is_file():
         return FixPlan("unsupported", note=UNSUPPORTED_NOTE)
+    linked = _linked_outside(project)
+    if linked:
+        return FixPlan("unsupported", note=LINKED_OUTSIDE_NOTE.format(files="; ".join(linked)))
     targets = fix_targets(result, include_filtered=include_filtered)
     if not targets:
         return FixPlan("none", note=NOTHING_TO_FIX)

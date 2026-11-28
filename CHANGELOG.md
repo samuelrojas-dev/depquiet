@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and reports what it upgraded instead of "Fixed N alerts".
 - With `--apply` the plan says "Running:" instead of "Then run:", and the confirmation names
   only what changed ("uv.lock is updated" when no requirement file was edited).
+- A `pyproject.toml` (or `uv.toml`) that is a link to a file outside the project no longer
+  crashes `--fix-plan` with a traceback. depquiet verifies on a copy of the project, which cannot
+  follow that link, so the plan says so and plans nothing. A link inside the project still works.
+- An unexpected error prints one plain message, says it is a bug in depquiet and where to report
+  it, and exits with code `3` (never `0`). `DEPQUIET_DEBUG=1` shows the traceback.
 
 ## [0.60.5] - 2026-11-27
 
