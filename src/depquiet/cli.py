@@ -516,7 +516,8 @@ def _main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="depquiet",
         description=(
-            "Silence the noise. Surface the signal. Triage vulnerability alerts in seconds."
+            "Tells you what to change to close your dependency alerts, verified with your "
+            "project's own resolver (uv, Poetry or npm), and which alerts never reach production."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""common runs:
@@ -524,8 +525,8 @@ def _main(argv: list[str] | None = None) -> int:
   depquiet --json                   machine-readable report
   depquiet --check-fixes            uv: can each fix be installed, and what blocks it
   depquiet --fix-plan plan.diff     uv, Poetry, npm: one verified change for all fixes
-  depquiet --fix-plan --apply       uv, Poetry: apply that change and relock (restored on failure)
-  depquiet --fix-plan --raise-python-floor  uv: also raise requires-python when a fix needs it
+  depquiet --fix-plan --apply       uv, Poetry, npm: apply it and relock (undone on failure)
+  depquiet --fix-plan --raise-python-floor  uv, Poetry: raise requires-python if a fix needs it
   depquiet --fail-on high           fail CI on high or critical ACTION alerts
 
 other commands:
@@ -651,16 +652,17 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
         const="-",
         default=None,
         metavar="FILE",
-        help="For uv projects: compute the pyproject.toml changes that let the suggested "
-        "fixes install together, verify them with uv's resolver on a copy of the project, "
-        "and print the diff (or write it to FILE, for git apply). Implies --check-fixes. "
-        "Changes nothing in the project. Trusted code only, like --check-fixes",
+        help="For uv, Poetry and npm projects: compute the requirement changes that let the "
+        "suggested fixes install together, verify them with the project's own resolver on a "
+        "copy of the project, and print the diff (or write it to FILE, for git apply) and the "
+        "lock command. Changes nothing in the project. Trusted code only, like --check-fixes",
     )
     parser.add_argument(
         "--apply",
         action="store_true",
-        help="With --fix-plan: apply the verified plan to the project (edit pyproject.toml "
-        "or uv.toml, then run uv lock). If uv lock fails, every file is put back as it was",
+        help="With --fix-plan: apply the verified plan to the project (edit the requirement "
+        "files, then relock with uv, Poetry or npm). If relocking fails, every file is put back "
+        "as it was",
     )
     parser.add_argument(
         "--fix-filtered",
@@ -1055,6 +1057,10 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
         _print_json(result, license_report=license_report, fix_plan=fix_plan)
     else:
         print_scan_result(result, plan_follows=fix_plan is not None)
+        if fix_plan is None and not args.check_fixes and not (args.fix or args.dry_run):
+            hint = _plan_hint(result, args.path)
+            if hint:
+                notices.append(hint)
         # The report ends with a blank line: one note per line after it.
         for notice in notices:
             print(notice)
@@ -1327,17 +1333,40 @@ _SEVERITY_RANK: dict[str, int] = {
 }
 
 
+_PLAN_RESOLVERS = (("uv.lock", "uv"), ("poetry.lock", "Poetry"), ("package-lock.json", "npm"))
+
+
+def _plan_resolver(project: Path) -> str:
+    """The resolver a verified plan uses here ("uv", "Poetry", "npm"), or "" if none."""
+    return next((name for lock, name in _PLAN_RESOLVERS if (project / lock).is_file()), "")
+
+
 def _has_planned_lock(project: Path) -> bool:
     """Whether --fix can apply a verified plan here: uv, Poetry or npm."""
-    return any(
-        (project / name).is_file() for name in ("uv.lock", "poetry.lock", "package-lock.json")
-    )
+    return bool(_plan_resolver(project))
 
 
 def _still_open(result: ScanResult, plan: FixPlan) -> list[TriageResult]:
     """ACTION alerts in packages the plan does not fully fix."""
     fixed = {_pep503(i.package) for i in plan.included if not (i.partial or i.forked_below)}
     return [r for r in result.action if _pep503(r.vuln.package) not in fixed]
+
+
+def _plan_hint(result: ScanResult, project: Path) -> str:
+    """The next step after a scan with fixable alerts: the verified plan.
+
+    A first scan ended on the alert list, and nothing said that depquiet can
+    work out the change that closes them (end-to-end review, 2026-11-27).
+    """
+    if not any(r.vuln.fix_version for r in result.action):
+        return ""
+    resolver = _plan_resolver(project)
+    if not resolver:
+        return ""
+    return (
+        f"➡️  Next: depquiet --fix-plan works out one change for these alerts and checks it "
+        f"with {resolver} on a copy of the project. It changes nothing; depquiet --fix applies it."
+    )
 
 
 def _should_fail(result: ScanResult, fail_on: str | None) -> bool:

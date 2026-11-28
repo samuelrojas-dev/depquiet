@@ -66,6 +66,12 @@ def print_scan_result(result: ScanResult, *, plan_follows: bool = False) -> None
     ``plan_follows``: a fix plan is printed after the report. Each alert's
     fix check would repeat it, three or four lines per alert above the plan
     the user asked for, so the list gets one summary line instead.
+
+    ACTION alerts are grouped by package, the shape of the fix, unless the
+    run checked each fix (--check-fixes without a plan): then each alert keeps
+    its own check. Listed one by one, a first scan of depquiet-floor-test put
+    71 alerts on 170 lines, pillow's on 40 of them with two different fix
+    versions (end-to-end review, 2026-11-27).
     """
     if not result.scanned:
         print(f"\n{_c(_YELLOW, '⚠️')}  Nothing scanned: {result.note}")
@@ -130,7 +136,7 @@ def print_scan_result(result: ScanResult, *, plan_follows: bool = False) -> None
             )
 
     # Action required
-    if action and plan_follows:
+    if action and (plan_follows or not any(r.fix_check for r in action)):
         print()
         print(f"{_c(_RED, '🔴')} {_c(_BOLD, 'ACTION REQUIRED: ' + _count(len(action), 'alert'))}")
         _print_by_package(action)
@@ -208,18 +214,28 @@ def _print_by_package(action: list[Any]) -> None:
         target, highest = max(fixes, key=lambda f: version_key(f[1])) if fixes else ("", "")
         named = f"{target} " if target != package else ""
         fix_str = f"  FIX: update {named}to {highest}" if highest else ""
+        if highest and is_prerelease(highest):
+            fix_str += " (pre-release)"
         noun = _count(len(rows), "alert")
         kev = [r.vuln.cve for r in rows if getattr(r, "kev_entry", None) is not None]
         kev_str = f"  {_c(_RED, 'KNOWN EXPLOITED: ' + ', '.join(kev))}" if kev else ""
         print(f"   {_c(_RED, '•')} {package}  {noun}{fix_str}{kev_str}")
         print(f"     {_c(_DIM, first_items(ids, 4))}")
-        scopes = {r.python_scope for r in rows}
-        if len(scopes) == 1 and rows[0].python_scope:
-            print(f"     {_c(_YELLOW, _scope_line(rows[0].python_scope))}")
-        imports = rows[0].reachable_imports
-        if imports:
-            more = f" and {len(imports) - 2} more" if len(imports) > 2 else ""
-            print(f"     {_c(_DIM, '→')} {', '.join(imports[:2])}{more}")
+        parents = sorted(
+            {p for r in rows if r.dependency_type == "transitive" for p in r.introduced_by or []}
+        )
+        if parents:
+            print(f"     {_c(_DIM, 'via ' + first_items(parents, 3))}")
+        for scope in sorted({r.python_scope for r in rows if r.python_scope}):
+            scoped = sum(1 for r in rows if r.python_scope == scope)
+            share = "" if scoped == len(rows) else f"{scoped} of {len(rows)}: "
+            print(f"     {_c(_YELLOW, share + _scope_line(scope))}")
+        imports = list(dict.fromkeys(i for r in rows for i in r.reachable_imports))
+        for imp in imports[:3]:
+            print(f"     {_c(_DIM, '→')} {imp}")
+        if len(imports) > 3:
+            rest = len(imports) - 3
+            print(f"     {_c(_DIM, f'→ and {rest} more (depquiet explain shows all)')}")
     _print_check_summary(action)
 
 

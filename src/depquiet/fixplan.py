@@ -1388,8 +1388,8 @@ def _avoid_split(
 
 # Shown when the project has no lockfile --fix-plan can work with.
 UNSUPPORTED_NOTE = (
-    "--fix-plan works on uv projects (uv.lock) and Poetry projects (poetry.lock). "
-    "On npm, --fix installs the fixes."
+    "--fix-plan works on projects with a uv.lock, a poetry.lock or a package-lock.json "
+    "(uv, Poetry, npm): it verifies the change with that resolver. This project has none of them."
 )
 # No alert left to act on has a fixed version: there is nothing to plan, which
 # is not the same as a plan that failed.

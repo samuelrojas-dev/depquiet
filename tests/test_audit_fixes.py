@@ -222,7 +222,10 @@ def test_cli_fix_plan_on_requirements_names_poetry(tmp_path, monkeypatch, capsys
     _stdin(monkeypatch)
     main(["--path", str(tmp_path), "--stdin", "--scanner", "pip", "--fix-plan"])
     err = capsys.readouterr().err
-    assert "--fix-plan works on uv projects (uv.lock) and Poetry projects" in err
+    assert (
+        "--fix-plan works on projects with a uv.lock, a poetry.lock or a package-lock.json" in err
+    )
+    assert "--fix installs the fixes" not in err
     assert "--fix-plan works on projects with a uv.lock." not in err
 
 

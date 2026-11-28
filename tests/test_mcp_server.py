@@ -93,7 +93,7 @@ def test_other_projects_get_the_plan_s_explanation(tmp_path, monkeypatch) -> Non
     _stdin(monkeypatch, {"dependencies": []}, offline=False)
     out = plan_fixes(str(_project(tmp_path)))
     assert out["ok"] and out["diff"] is None
-    assert "works on uv projects" in out["plan"]["note"]
+    assert "uv.lock, a poetry.lock or a package-lock.json" in out["plan"]["note"]
 
 
 def test_the_tools_never_write_to_stdout(tmp_path, monkeypatch, capsys) -> None:
