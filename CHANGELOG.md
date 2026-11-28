@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.60.5] - 2026-11-27
+
 ### Fixed
 - The plan no longer proposes a fix that carries advisories of its own. An advisory names the
   first release that fixes it, and that release can have advisories published later: on
@@ -1717,7 +1719,8 @@ requirements.txt and npm projects:
 - CI workflow with lint, typecheck, test matrix (3.11/3.12/3.13), and build
 - Automated release workflow with trusted PyPI publishing
 
-[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.60.4...HEAD
+[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.60.5...HEAD
+[0.60.5]: https://github.com/samuelrojas-dev/depquiet/compare/v0.60.4...v0.60.5
 [0.60.4]: https://github.com/samuelrojas-dev/depquiet/compare/v0.60.3...v0.60.4
 [0.60.3]: https://github.com/samuelrojas-dev/depquiet/compare/v0.60.2...v0.60.3
 [0.60.2]: https://github.com/samuelrojas-dev/depquiet/compare/v0.60.1...v0.60.2
