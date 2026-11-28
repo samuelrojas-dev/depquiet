@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.61.1] - 2026-11-27
+
 ### Fixed
 - The Action's fix pull request no longer force-pushes over a commit someone added to it (a test
   fix, say): when the branch's last commit is not depquiet's, the run leaves the branch and the
@@ -1761,7 +1763,8 @@ requirements.txt and npm projects:
 - CI workflow with lint, typecheck, test matrix (3.11/3.12/3.13), and build
 - Automated release workflow with trusted PyPI publishing
 
-[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.61.0...HEAD
+[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.61.1...HEAD
+[0.61.1]: https://github.com/samuelrojas-dev/depquiet/compare/v0.61.0...v0.61.1
 [0.61.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.60.5...v0.61.0
 [0.60.5]: https://github.com/samuelrojas-dev/depquiet/compare/v0.60.4...v0.60.5
 [0.60.4]: https://github.com/samuelrojas-dev/depquiet/compare/v0.60.3...v0.60.4
