@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.61.0] - 2026-11-27
+
 ### Changed
 - A first scan groups ACTION alerts by package, with the highest fix: on depquiet-floor-test,
   71 alerts took 170 lines, pillow's 40 of them with two different fix versions. Alerts are
@@ -1748,7 +1750,8 @@ requirements.txt and npm projects:
 - CI workflow with lint, typecheck, test matrix (3.11/3.12/3.13), and build
 - Automated release workflow with trusted PyPI publishing
 
-[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.60.5...HEAD
+[Unreleased]: https://github.com/samuelrojas-dev/depquiet/compare/v0.61.0...HEAD
+[0.61.0]: https://github.com/samuelrojas-dev/depquiet/compare/v0.60.5...v0.61.0
 [0.60.5]: https://github.com/samuelrojas-dev/depquiet/compare/v0.60.4...v0.60.5
 [0.60.4]: https://github.com/samuelrojas-dev/depquiet/compare/v0.60.3...v0.60.4
 [0.60.3]: https://github.com/samuelrojas-dev/depquiet/compare/v0.60.2...v0.60.3
