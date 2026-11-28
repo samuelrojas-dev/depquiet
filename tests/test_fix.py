@@ -75,6 +75,28 @@ class TestFindFixable:
     def test_empty_results(self):
         assert find_fixable(_scan_result([])) == []
 
+    def test_one_upgrade_per_package_to_its_highest_fix(self):
+        """depquiet-floor-test (2026-11-27): one upgrade per fix version moved
+        soupsieve to 4.0.0 and then back to 3.0.2, and reported both as fixed."""
+        results = [
+            _tr(_vuln(cve=f"CVE-{n}", package="soupsieve", version="2.8.3", fix_version=fix))
+            for n, fix in enumerate(["2.8.4", "2.9.0", "2.10.0", "4.0.0", "3.0.2"])
+        ]
+        fixable = find_fixable(_scan_result(results, pm="pip"))
+        assert [(t.vuln.package, t.vuln.fix_version) for t in fixable] == [("soupsieve", "4.0.0")]
+
+    def test_the_upgrade_counts_every_alert_it_covers(self, tmp_path):
+        (tmp_path / "uv.lock").write_text("version = 1\n", encoding="utf-8")
+        results = [
+            _tr(_vuln(cve=f"CVE-{n}", package="soupsieve", version="2.8.3", fix_version=fix))
+            for n, fix in enumerate(["2.10.0", "4.0.0", "3.0.2"])
+        ]
+        report = apply_fixes(_scan_result(results, pm="pip"), tmp_path, dry_run=True)
+        assert len(report.fixed) == 1
+        only = report.fixed[0]
+        assert (only.to_version, only.alerts) == ("4.0.0", 3)
+        assert only.message == "Would run: uv lock --upgrade-package soupsieve==4.0.0"
+
 
 # -- apply_fixes --
 
@@ -204,7 +226,7 @@ class TestPrintFixReport:
         report = FixReport(fixed=[FixResult("lodash", "4.17.20", "4.17.21", "CVE-2024-1234", True)])
         print_fix_report(report)
         captured = capsys.readouterr()
-        assert "Fixed 1" in captured.err
+        assert "Upgraded 1 package (1 alert)" in captured.err
         assert "lodash" in captured.err
 
     def test_prints_dry_run_prefix(self, capsys):

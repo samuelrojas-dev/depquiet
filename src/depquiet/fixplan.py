@@ -2611,8 +2611,12 @@ def python_floor_lines(option: PythonFloor | None, tool: str = "uv") -> list[str
     return lines
 
 
-def print_fix_plan(plan: FixPlan, file: Any) -> None:
-    """Human summary (to stderr); the diff itself is written by the caller."""
+def print_fix_plan(plan: FixPlan, file: Any, *, applying: bool = False) -> None:
+    """Human summary (to stderr); the diff itself is written by the caller.
+
+    ``applying``: the caller runs the command next (``--apply``, ``--fix``), so it
+    is not left to the reader.
+    """
     print("\n🔧 Fix plan", file=file)
     if plan.status == "unsupported" or (plan.status == "none" and not plan.items):
         print(f"   {plan.note}", file=file)
@@ -2707,5 +2711,5 @@ def print_fix_plan(plan: FixPlan, file: Any) -> None:
         if plan.dependabot_note():
             print(f"\n   {plan.dependabot_note()}", file=file)
         print(f"\n   Verified with {resolver} resolver: {verdict}.", file=file)
-        print(f"   Then run: {plan.command}", file=file)
+        print(f"   {'Running' if applying else 'Then run'}: {plan.command}", file=file)
         print(f"   {plan.note}", file=file)

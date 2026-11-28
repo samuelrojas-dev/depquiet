@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `--fix` applies the verified fix plan in uv, Poetry and npm projects (the same as
+  `--fix-plan --apply`). It used to run one upgrade per alert: on depquiet-floor-test it moved
+  semgrep, a direct dependency, from 1.187.0 back to 1.136.0 to fix mcp (which brought in a new
+  protobuf alert), and moved soupsieve to 4.0.0 and then back to 3.0.2 while reporting the alert
+  fixed in 4.0.0 as fixed. Now it is one version per package, checked together, never a direct
+  dependency moved back; it says which alerts the plan leaves open, and its exit code counts
+  only those. `--fix --dry-run` shows the plan.
+- In other projects, `--fix` runs one upgrade per package, to the highest fix its alerts name,
+  and reports what it upgraded instead of "Fixed N alerts".
+- With `--apply` the plan says "Running:" instead of "Then run:", and the confirmation names
+  only what changed ("uv.lock is updated" when no requirement file was edited).
+
 ## [0.60.5] - 2026-11-27
 
 ### Fixed

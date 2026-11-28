@@ -26,10 +26,12 @@ def test_dry_run_never_says_fixed(capsys) -> None:
     assert "Would run: uv lock" in err
 
 
-def test_real_fix_still_says_fixed(capsys) -> None:
+def test_a_real_upgrade_says_what_ran_and_to_scan_again(capsys) -> None:
     report = FixReport(fixed=[FixResult("lodash", "4.17.20", "4.17.21", "CVE-1", True)])
     print_fix_report(report)
-    assert "✅ Fixed 1 alert:" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "✅ Upgraded 1 package (1 alert); scan again to confirm what is closed:" in err
+    assert "lodash 4.17.20 → 4.17.21  (CVE-1)" in err
 
 
 AUDIT = {
@@ -80,4 +82,5 @@ def test_dry_run_exit_code_is_the_scans(tmp_path, monkeypatch, capsys) -> None:
     run_command.assert_not_called()
     assert code == 1  # the ACTION alert is still open: nothing ran
     err = capsys.readouterr().err
-    assert "Would try 1 upgrade." in err and "Fixed" not in err
+    # A uv project's --fix is the verified plan, which needs the network.
+    assert "--fix needs network access; skipped (--offline)" in err and "Fixed" not in err

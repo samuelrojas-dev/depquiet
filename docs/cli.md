@@ -47,10 +47,11 @@ depquiet --epss-threshold 0.05
 # Use a custom config file
 depquiet --config ./ci-config.yaml
 
-# Auto-fix ACTION items that have a known fix version
+# Fix the ACTION alerts: in uv, Poetry and npm projects this applies the
+# verified fix plan (the same as --fix-plan --apply)
 depquiet --fix
 
-# See what --fix would do without changing anything
+# See the plan --fix would apply, without changing anything
 depquiet --fix --dry-run
 
 # License compliance scan

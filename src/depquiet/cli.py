@@ -33,7 +33,7 @@ from depquiet.diff import diff_scans, diff_to_json, format_diff, format_diff_mar
 from depquiet.engine import scan
 from depquiet.finding_identity import parse_report, validate_project_id
 from depquiet.fix import apply_fixes, print_fix_report
-from depquiet.fixcheck import check_fixes
+from depquiet.fixcheck import _pep503, check_fixes
 from depquiet.fixplan import (
     UNSUPPORTED_NOTE as FIX_PLAN_UNSUPPORTED,
 )
@@ -50,7 +50,7 @@ from depquiet.html_report import write_html
 from depquiet.ignore import apply_ignores, load_ignore, print_ignore_warnings
 from depquiet.kev import KevCatalog, apply_kev, fetch_kev_catalog, load_kev_from_file
 from depquiet.license import LicenseReport, print_license_report, scan_licenses
-from depquiet.models import ScanResult
+from depquiet.models import ScanResult, TriageResult
 from depquiet.npmplan import build_npm_plan, is_npm_project
 from depquiet.output import print_scan_result
 from depquiet.parsers.osv import parse_lockfiles
@@ -603,7 +603,12 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
     parser.add_argument(
         "--fix",
         action="store_true",
-        help="Auto-fix ACTION items that have a known fix version",
+        help=(
+            "Fix the ACTION alerts: in uv, Poetry and npm projects, apply the verified fix "
+            "plan (the same as --fix-plan --apply: one version per package, checked together, "
+            "no direct dependency moved back). In other projects, list the requirement to "
+            "change. Trusted code only, like --fix-plan"
+        ),
     )
     parser.add_argument(
         "--check-fixes",
@@ -664,7 +669,7 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Show what --fix would do without changing anything",
+        help="Show what --fix would do (the verified plan) without changing anything",
     )
     parser.add_argument(
         "--license",
@@ -753,6 +758,16 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
     if not args.path.exists():
         print(f"Error: --path {args.path}: no such directory.", file=sys.stderr)
         return 2
+    # --fix applies the verified plan where the project has one: one version per
+    # package, the fixes checked together, never a direct dependency moved back.
+    # One upgrade per alert moved semgrep back 51 releases, and soupsieve below
+    # a fix it then reported as done (depquiet-floor-test, 2026-11-27).
+    fix_via_plan = bool(
+        (args.fix or args.dry_run) and args.fix_plan is None and _has_planned_lock(args.path)
+    )
+    if fix_via_plan:
+        args.fix_plan = "-"
+        args.apply = args.fix and not args.dry_run
 
     # Load project config file
     try:
@@ -951,8 +966,15 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
         )
 
     fix_plan = None
+    applied = False
     if args.check_fixes or args.fix_plan is not None:
-        flag = "--fix-plan" if args.fix_plan is not None else "--check-fixes"
+        flag = (
+            "--fix"
+            if fix_via_plan
+            else "--fix-plan"
+            if args.fix_plan is not None
+            else "--check-fixes"
+        )
         if merged.offline:
             warnings.append(f"depquiet: {flag} needs network access; skipped (--offline).")
         elif is_npm_project(args.path):
@@ -1018,14 +1040,14 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
         # The scan report goes to stdout, the plan to stderr: flush first, so a
         # run saved with 2>&1 keeps the report above the plan.
         sys.stdout.flush()
-        print_fix_plan(fix_plan, sys.stderr)
+        print_fix_plan(fix_plan, sys.stderr, applying=bool(args.apply and fix_plan.included))
         if fix_plan.diff and args.fix_plan != "-":
             Path(args.fix_plan).write_text(fix_plan.diff, encoding="utf-8")
             print(
                 f"   Diff written to {args.fix_plan} (apply with: git apply {args.fix_plan})",
                 file=sys.stderr,
             )
-        elif fix_plan.diff and not args.json_output:
+        elif fix_plan.diff and not args.json_output and not fix_via_plan:
             print(fix_plan.diff)
         elif fix_plan.included and args.fix_plan != "-":
             print(
@@ -1058,15 +1080,32 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
             lockfile = lockfile_name(fix_plan.tool)
             problem = apply_fix_plan(fix_plan, args.path)
             if problem:
-                print(f"Error: --apply: {problem}", file=sys.stderr)
+                print(
+                    f"Error: {'--fix' if fix_via_plan else '--apply'}: {problem}", file=sys.stderr
+                )
                 return 2
-            print(
-                f"   Applied: the files above are edited and {lockfile} is updated. "
-                "Run your tests before you commit.\n"
-                "   The exit code reports the alerts found before the plan was applied; "
-                "scan again to see what is left.",
-                file=sys.stderr,
+            applied = True
+            changed = (
+                f"the files above are edited and {lockfile} is updated"
+                if fix_plan.edits
+                else (f"{lockfile} is updated")
             )
+            print(f"   Applied: {changed}. Run your tests before you commit.", file=sys.stderr)
+            if fix_via_plan:
+                left = _still_open(result, fix_plan)
+                print(
+                    f"   Still open: {len(left)} {_plural(len(left), 'alert')} the plan does not "
+                    "fix (left out above). Scan again to confirm what is closed."
+                    if left
+                    else "   Every ACTION alert is in the applied plan. Scan again to confirm.",
+                    file=sys.stderr,
+                )
+            else:
+                print(
+                    "   The exit code reports the alerts found before the plan was applied; "
+                    "scan again to see what is left.",
+                    file=sys.stderr,
+                )
     if merged.sarif:
         write_sarif(result, merged.sarif)
 
@@ -1158,6 +1197,11 @@ Python projects need pip-audit (pip install pip-audit) or uv; npm projects need 
             return 1
 
     # Auto-fix
+    if fix_via_plan:
+        if applied and fix_plan is not None:
+            return 1 if _fails(_still_open(result, fix_plan), merged.fail_on) else 0
+        # A dry run, or nothing applied: the alerts found are all still there.
+        return 1 if _should_fail(result, merged.fail_on) else 0
     if args.fix or args.dry_run:
         fix_report = apply_fixes(result, args.path, dry_run=args.dry_run)
         print_fix_report(fix_report, dry_run=args.dry_run)
@@ -1255,6 +1299,19 @@ _SEVERITY_RANK: dict[str, int] = {
 }
 
 
+def _has_planned_lock(project: Path) -> bool:
+    """Whether --fix can apply a verified plan here: uv, Poetry or npm."""
+    return any(
+        (project / name).is_file() for name in ("uv.lock", "poetry.lock", "package-lock.json")
+    )
+
+
+def _still_open(result: ScanResult, plan: FixPlan) -> list[TriageResult]:
+    """ACTION alerts in packages the plan does not fully fix."""
+    fixed = {_pep503(i.package) for i in plan.included if not (i.partial or i.forked_below)}
+    return [r for r in result.action if _pep503(r.vuln.package) not in fixed]
+
+
 def _should_fail(result: ScanResult, fail_on: str | None) -> bool:
     """Check whether any ACTION items meet the severity threshold.
 
@@ -1262,10 +1319,15 @@ def _should_fail(result: ScanResult, fail_on: str | None) -> bool:
     When fail_on is "none", the build never fails on findings.
     Otherwise, only ACTION items at or above the specified severity count.
     """
+    return _fails(result.action, fail_on)
+
+
+def _fails(action: list[TriageResult], fail_on: str | None) -> bool:
+    """Whether these ACTION alerts meet the --fail-on threshold."""
     if fail_on == "none":
         return False
 
-    if not result.action:
+    if not action:
         return False
 
     if fail_on is None:
@@ -1274,7 +1336,7 @@ def _should_fail(result: ScanResult, fail_on: str | None) -> bool:
 
     threshold = _SEVERITY_RANK.get(fail_on, 1)
     unknown = 0
-    for tr in result.action:
+    for tr in action:
         if not tr.vuln.severity_known:
             # pip-audit and uv audit give no severity: a placeholder must not
             # let a critical advisory through a "high" gate.

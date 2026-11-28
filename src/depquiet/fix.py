@@ -5,12 +5,17 @@ the appropriate package manager command to upgrade them. Only touches
 packages where the verdict is ACTION (not REVIEW or FILTERED) and a fix
 is available, so the blast radius is minimal.
 
-Python projects with a ``uv.lock`` are fixed in the lockfile (``uv lock
---upgrade-package``), whichever scanner found the alert; when uv's resolver
-refuses, the report says what blocks it, as ``--check-fixes`` does. Other
-Python projects are not fixed: ``pip install`` would change whatever
-environment depquiet runs in and leave the requirement files as they are, so
-the alert would come back. They are listed with the requirement to change.
+Projects with a uv.lock, poetry.lock or package-lock.json never get here: the
+CLI applies the verified fix plan for them (``--fix-plan --apply``), one
+version per package, checked together, and never a direct dependency moved
+back. This module is what is left for other projects. Python projects without
+a lock are not fixed: ``pip install`` would change whatever environment
+depquiet runs in and leave the requirement files as they are, so the alert
+would come back. They are listed with the requirement to change.
+
+One upgrade per package, to the highest fix its alerts name: running one per
+fix version moved soupsieve to 4.0.0 and then back to 3.0.2 (depquiet-floor-test,
+2026-11-27), and reported both as fixed.
 
 Usage::
 
@@ -26,7 +31,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from depquiet.fixcheck import FixCheck, _classify, _explain
-from depquiet.models import ScanResult, TriageResult, Verdict, clip, version_key
+from depquiet.models import ScanResult, TriageResult, Verdict, clip, first_items, version_key
 
 
 @dataclass
@@ -39,6 +44,7 @@ class FixResult:
     cve: str
     success: bool
     message: str = ""
+    alerts: int = 1  # the package's alerts this one upgrade covers
 
 
 @dataclass
@@ -57,20 +63,19 @@ class FixReport:
 
 
 def find_fixable(scan_result: ScanResult) -> list[TriageResult]:
-    """Return ACTION results that have a known fix version."""
-    seen: set[str] = set()
-    fixable: list[TriageResult] = []
+    """One ACTION result per package to upgrade: the one naming its highest fix."""
+    return [
+        max(group, key=lambda t: version_key(t.vuln.fix_version)) for group in _groups(scan_result)
+    ]
+
+
+def _groups(scan_result: ScanResult) -> list[list[TriageResult]]:
+    """ACTION results with a fix, grouped by the package that carries the fix."""
+    groups: dict[str, list[TriageResult]] = {}
     for tr in scan_result.results:
-        if tr.verdict != Verdict.ACTION:
-            continue
-        if not tr.vuln.fix_version:
-            continue
-        key = f"{tr.vuln.fix_package or tr.vuln.package}@{tr.vuln.fix_version}"
-        if key in seen:
-            continue
-        seen.add(key)
-        fixable.append(tr)
-    return fixable
+        if tr.verdict == Verdict.ACTION and tr.vuln.fix_version:
+            groups.setdefault(tr.vuln.fix_package or tr.vuln.package, []).append(tr)
+    return list(groups.values())
 
 
 def apply_fixes(
@@ -89,31 +94,32 @@ def apply_fixes(
     Returns:
         FixReport with results of each fix attempt.
     """
-    fixable = find_fixable(scan_result)
     report = FixReport()
     pm = scan_result.package_manager
 
-    for tr in fixable:
+    for group in _groups(scan_result):
+        tr = max(group, key=lambda t: version_key(t.vuln.fix_version))
         # Upgrade the package that carries the fix (for npm, often the direct
         # parent), never pin a transitive package as a new direct dependency.
         pkg = tr.vuln.fix_package or tr.vuln.package
         fix_ver = tr.vuln.fix_version
         from_ver = tr.vuln.version
-        cve = tr.vuln.cve
+        cve = first_items([t.vuln.cve for t in group], 3)
 
         manager = _manager(tr.vuln.package_manager or pm, project)
         if manager == "pip":
-            report.manual.append(
+            report.manual.extend(
                 FixResult(
                     package=pkg,
-                    from_version=from_ver,
-                    to_version=fix_ver,
-                    cve=cve,
+                    from_version=t.vuln.version,
+                    to_version=t.vuln.fix_version,
+                    cve=t.vuln.cve,
                     success=False,
                     message=(
                         f"require {pkg}>={fix_ver} where the project pins {pkg}, then reinstall"
                     ),
                 )
+                for t in group
             )
             continue
         if dry_run:
@@ -126,6 +132,7 @@ def apply_fixes(
                     cve=cve,
                     success=True,
                     message=f"Would run: {cmd_str}",
+                    alerts=len(group),
                 )
             )
             continue
@@ -140,6 +147,7 @@ def apply_fixes(
                     cve=cve,
                     success=True,
                     message=result.message,
+                    alerts=len(group),
                 )
             )
         else:
@@ -151,6 +159,7 @@ def apply_fixes(
                     cve=cve,
                     success=False,
                     message=result.message,
+                    alerts=len(group),
                 )
             )
 
@@ -247,10 +256,15 @@ def print_fix_report(report: FixReport, *, dry_run: bool = False) -> None:
                 file=sys.stderr,
             )
     elif report.fixed:
-        print(f"\n{prefix}✅ Fixed {_n(len(report.fixed), 'alert')}:", file=sys.stderr)
+        alerts = sum(r.alerts for r in report.fixed)
+        print(
+            f"\n{prefix}✅ Upgraded {_n(len(report.fixed), 'package')} "
+            f"({_n(alerts, 'alert')}); scan again to confirm what is closed:",
+            file=sys.stderr,
+        )
         for r in report.fixed:
             print(
-                f"   {r.cve}  {r.package} {r.from_version} → {r.to_version}",
+                f"   {r.package} {r.from_version} → {r.to_version}  ({r.cve})",
                 file=sys.stderr,
             )
 
